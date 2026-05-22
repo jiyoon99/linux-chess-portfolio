@@ -1,0 +1,20 @@
+groups:
+  - name: chess-service
+    rules:
+      - alert: ChessBackendScrapeDown
+        expr: up{job="chess-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Chess backend metrics scrape is down
+          description: Prometheus has been unable to scrape the chess backend for more than 2 minutes.
+
+      - alert: ChessHighDisconnectRate
+        expr: rate(chess_disconnects[5m]) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Chess WebSocket disconnect rate is elevated
+          description: The backend is seeing more than 0.2 WebSocket disconnects per second over 5 minutes.

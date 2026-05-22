@@ -1,0 +1,21 @@
+{
+  "name": "linux-chess-portfolio",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "go run ./backend/cmd/server",
+    "dev:frontend": "npm run dev -w frontend",
+    "dev:backend": "go run ./backend/cmd/server",
+    "dev:backend:db": "DATABASE_URL=postgres://chess:chess@localhost:5432/chess go run ./backend/cmd/server",
+    "dev:postgres": "docker compose up -d postgres",
+    "build": "mkdir -p backend/dist && go build -buildvcs=false -o backend/dist/chess-server ./backend/cmd/server && npm run build -w frontend",
+    "lint": "go test ./backend/... && npm run lint -w frontend",
+    "smoke": "playwright test",
+    "loadtest": "go run ./backend/cmd/loadtest -url ws://localhost:8080/ws -clients 20"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

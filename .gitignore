@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.prod
+npm-debug.log*
+coverage/
+data/
+tools/stockfish/
+test-results/
+playwright-report/
+backups/

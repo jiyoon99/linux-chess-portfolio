@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Chess PostgreSQL",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "chess",
+      "Username": "chess",
+      "SSLMode": "prefer"
+    }
+  }
+}

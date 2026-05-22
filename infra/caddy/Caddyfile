@@ -1,0 +1,36 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+	}
+
+	@websocket path /ws
+	reverse_proxy @websocket backend:3000
+
+	reverse_proxy /auth/* backend:3000
+	reverse_proxy /games/* backend:3000
+	reverse_proxy /admin/* backend:3000
+	reverse_proxy /health backend:3000
+	reverse_proxy /ready backend:3000
+
+	reverse_proxy frontend:80
+}
+
+{$GRAFANA_DOMAIN} {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+	reverse_proxy grafana:3000
+}
