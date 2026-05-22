@@ -1,12 +1,20 @@
 # Linux Chess Portfolio
 
-Realtime multiplayer chess service built as a Linux operations portfolio.
+Realtime multiplayer chess service built as a backend and Linux operations portfolio.
 
-CI runs Go tests, frontend type checks, and production builds through GitHub Actions.
+This project is designed to show how I build, package, monitor, and document a service that can run on a Linux server. The chess product gives reviewers an interactive workflow, while the surrounding infrastructure demonstrates backend engineering, deployment, observability, and operations practice.
 
 ![Linux Chess demo](docs/assets/linux-chess-demo.png)
 
-## What This Demonstrates
+## Portfolio Summary
+
+**Target roles:** backend developer, junior DevOps engineer, Linux server operator, full-stack developer with infrastructure responsibilities.
+
+**Core idea:** not just a browser chess game. It is a small production-style service with authentication, realtime WebSocket traffic, persistence, cache, reverse proxying, health checks, metrics, alert rules, CI, smoke tests, and operations documentation.
+
+**Repository:** `github.com/jiyoon99/linux-chess-portfolio`
+
+## Highlights
 
 - Realtime WebSocket gameplay
 - Server-side chess validation
@@ -16,7 +24,7 @@ CI runs Go tests, frontend type checks, and production builds through GitHub Act
 - In-memory matchmaking with room codes and AI games
 - PostgreSQL-ready game persistence layer
 - Redis-backed room/game runtime cache
-- Prometheus-style metrics and health endpoints
+- Prometheus metrics, health checks, readiness checks, and alert rules
 - Readiness checks for DB and Redis
 - Authenticated operations status panel
 - Prometheus and Grafana observability stack in Docker Compose
@@ -24,6 +32,23 @@ CI runs Go tests, frontend type checks, and production builds through GitHub Act
 - Docker Compose local production topology
 - systemd service examples for Linux deployment
 - Backup, logging, firewall, and monitoring notes
+- GitHub Actions CI and Playwright smoke test
+
+## Skills Demonstrated
+
+| Area | Evidence in this repo |
+| --- | --- |
+| Backend | Go REST handlers, WebSocket game loop, auth/session logic, server-side move validation |
+| Frontend | React chess UI, account panel, game history, analysis panel, operations status panel |
+| Database | PostgreSQL schema, user/game persistence, stats and game detail queries |
+| Cache | Redis room and active game runtime records |
+| Linux operations | systemd unit, Nginx/Caddy configs, backup script, deployment checklist |
+| Observability | `/metrics`, Prometheus config, Grafana dashboard, alert rules, JSON logs |
+| Quality | Go tests, TypeScript check, production build, Playwright browser smoke test, CI |
+
+## What I Would Explain In An Interview
+
+I built this as an end-to-end Linux service rather than a simple UI demo. The backend owns chess validation so the browser cannot submit illegal moves. WebSocket traffic is routed through a reverse proxy, completed games can be persisted to PostgreSQL, and Redis is used for room/game runtime state. The service exposes health, readiness, and Prometheus metrics, with Grafana dashboards and alert rules for operational review. The repository also includes systemd, backup/restore, incident response, and production deployment notes to show how the app would be run and maintained.
 
 ## Repository Layout
 
@@ -44,6 +69,7 @@ Operational docs:
 - `docs/load-test.md`
 - `docs/operations-checklist.md`
 - `docs/production-deploy.md`
+- `docs/roadmap.md`
 
 ## Architecture
 

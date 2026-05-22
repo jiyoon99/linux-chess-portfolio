@@ -37,3 +37,4 @@ Use this checklist when presenting the project or reviewing it before publishing
 
 - Add external uptime checks against `/health`.
 - Ship JSON logs to Loki or another log backend.
+- See `docs/roadmap.md` for the prioritized improvement plan.
