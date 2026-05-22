@@ -163,6 +163,9 @@ var (
 	upgrader = websocket.Upgrader{
 		CheckOrigin: checkWebSocketOrigin,
 	}
+
+	// 실시간 게임 판단은 지연을 줄이기 위해 메모리 상태를 기준으로 처리한다.
+	// Redis에는 운영 패널과 재시작 대응에 필요한 일부 상태만 복제한다.
 	stateMu sync.Mutex
 	waiting []*client
 	rooms   = map[string]*client{}
@@ -177,6 +180,8 @@ var (
 	completedGames    int
 	disconnects       int
 
+	// 로컬 데모에서는 PostgreSQL/Redis 없이도 실행되도록 메모리 fallback을 둔다.
+	// 운영 환경에서는 Redis가 설정된 경우 활성 세션을 함께 저장한다.
 	authMu        sync.Mutex
 	memoryUsers   = map[string]userAccount{}
 	sessions      = map[string]sessionRecord{}
@@ -228,6 +233,8 @@ func httpHandler() http.Handler {
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/metrics", metricsHandler)
 	mux.HandleFunc("/ws", wsHandler)
+
+	// panic 복구와 요청 로그를 유지하면서 정상/오류 응답 모두에 보안 헤더를 적용한다.
 	return withSecurityHeaders(withRecovery(withRequestLogging(mux)))
 }
 
@@ -243,6 +250,7 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func readyHandler(w http.ResponseWriter, r *http.Request) {
+	// /ready는 /health보다 엄격하다. 운영 트래픽을 받기 전 DB/Redis 응답까지 확인한다.
 	status := map[string]interface{}{
 		"ok":     true,
 		"db":     false,
@@ -292,6 +300,7 @@ func readyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func metricsHandler(w http.ResponseWriter, r *http.Request) {
+	// Prometheus가 직접 scrape하는 지표다. 별도 라이브러리 없이 노출 지표를 명확히 보여준다.
 	stateMu.Lock()
 	waitingCount := len(waiting)
 	roomCount := len(rooms)
@@ -614,6 +623,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	recordConnectionOpened()
 	send(c, "session:ready", map[string]string{"clientId": c.id, "userId": c.userID, "username": c.username})
 
+	// WebSocket 메시지가 실시간 명령 API 역할을 한다. 메시지 타입별로 책임을 분리한다.
 	for {
 		var msg inboundMessage
 		if err := conn.ReadJSON(&msg); err != nil {
@@ -657,6 +667,7 @@ func handleJoin(c *client) {
 		return
 	}
 
+	// 두 번째 대기자가 들어오면 매칭을 완성한다. 큐 순서가 항상 백색을 결정하지 않게 색을 섞는다.
 	opponent := waiting[0]
 	waiting = waiting[1:]
 	if mrand.Intn(2) == 0 {
@@ -671,6 +682,7 @@ func startGameLocked(white *client, black *client) {
 }
 
 func startGameWithRoomLocked(white *client, black *client, roomCode string) {
+	// 호출자는 이미 stateMu를 잡고 있다. 큐/방 제거와 게임 생성을 한 번에 처리해 중복 참가를 막는다.
 	g := &game{
 		id:        randomID(10),
 		board:     chess.NewGame(),
@@ -703,6 +715,7 @@ func handleCreateRoom(c *client) {
 	removeWaitingLocked(c)
 	code := uniqueRoomCodeLocked()
 	rooms[code] = c
+	// 방 코드는 Redis에 만료 시간을 두고 기록한다. 현재 프로세스의 실제 매칭 기준은 메모리 map이다.
 	cacheSetRoom(code, c.id)
 	send(c, "room:created", map[string]string{"code": code})
 	send(c, "room:waiting", map[string]string{"code": code})
@@ -785,6 +798,7 @@ func handleMove(c *client, raw json.RawMessage) {
 	}
 
 	moveText := coordinateMove(payload)
+	// 합법 수 검증은 모두 서버에서 수행한다. 브라우저는 좌표만 보내고 chess 라이브러리가 판정한다.
 	move, err := chess.UCINotation{}.Decode(g.board.Position(), moveText)
 	if err != nil {
 		send(c, "game:error", map[string]string{"message": "Illegal move."})
@@ -802,6 +816,7 @@ func handleMove(c *client, raw json.RawMessage) {
 	broadcast(g, "game:update", gameView(g, chess.NoColor, map[string]interface{}{"lastMove": moveText}))
 	persistIfFinished(g)
 	if g.aiColor != chess.NoColor && g.board.Outcome() == chess.NoOutcome && g.board.Position().Turn() == g.aiColor {
+		// 사람 수 직후 AI 수를 동기적으로 처리해 클라이언트가 서버 기준 보드 갱신만 따라가게 한다.
 		playAIMove(g)
 	}
 }
@@ -838,6 +853,7 @@ func handleAnalysis(c *client) {
 	}
 
 	g.mu.Lock()
+	// 분석은 복제한 보드에서 수행한다. Stockfish/heuristic 분석이 실제 게임 상태를 바꾸면 안 된다.
 	board := g.board.Clone()
 	level := g.aiLevel
 	g.mu.Unlock()
@@ -1053,6 +1069,8 @@ func startSession(w http.ResponseWriter, r *http.Request, account userAccount) {
 	authMu.Lock()
 	sessions[token] = record
 	authMu.Unlock()
+	// Redis 세션은 재시작 또는 다중 인스턴스 상황에서 로그인 상태 복구를 돕는다.
+	// 메모리 세션은 로컬 실행을 위한 fallback이다.
 	cacheSetSession(token, record)
 	http.SetCookie(w, &http.Cookie{
 		Name:     "chess_session",
@@ -1082,6 +1100,7 @@ func currentUser(r *http.Request) (userAccount, bool) {
 	}
 	authMu.Unlock()
 
+	// 메모리에 세션이 없으면 Redis를 조회한다. Redis 조회 성공 시 다시 메모리에 올려 이후 요청을 빠르게 처리한다.
 	record, ok = cacheGetSession(cookie.Value)
 	if !ok || time.Now().After(record.ExpiresAt) {
 		return userAccount{}, false
@@ -1132,6 +1151,7 @@ func validateCSRF(r *http.Request) bool {
 	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
 		return true
 	}
+	// Double-submit CSRF 방식이다. 읽을 수 있는 쿠키 값과 커스텀 헤더 값이 같아야 통과한다.
 	cookie, err := r.Cookie("chess_csrf")
 	if err != nil || cookie.Value == "" {
 		return false

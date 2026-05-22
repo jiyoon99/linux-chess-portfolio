@@ -116,6 +116,7 @@ function apiUrl(path: string) {
 }
 
 function csrfToken() {
+  // 서버가 내려준 double-submit CSRF 쿠키를 logout 같은 인증 POST 요청 헤더에 실어 보낸다.
   return document.cookie
     .split("; ")
     .find((cookie) => cookie.startsWith("chess_csrf="))
@@ -180,6 +181,7 @@ function App() {
   }, [chess, selected]);
 
   useEffect(() => {
+    // 첫 화면에서 서비스 상태와 기존 로그인 세션을 확인한 뒤 WebSocket을 연결한다.
     fetch(apiUrl("/health"))
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error("health check failed"))))
       .then((payload: HealthState) => setHealth(payload))
@@ -210,6 +212,7 @@ function App() {
       const message = JSON.parse(event.data) as ServerMessage;
       const payload = message.payload ?? {};
 
+      // 서버가 보낸 권위 있는 상태만 UI에 반영한다. 클라이언트는 보드를 낙관적으로 갱신하지 않는다.
       if (message.type === "session:ready") {
         setClientId(payload.clientId ?? "");
         if (payload.username && !authUser) {
@@ -313,6 +316,7 @@ function App() {
     if (gameState !== "playing" || turn !== color) return;
     const piece = chess.get(square);
 
+    // chess.js는 UI 힌트용으로만 사용한다. 최종 합법 수 판정은 백엔드가 다시 수행한다.
     if (!selected) {
       if (piece?.color === color) setSelected(square);
       return;
@@ -401,6 +405,7 @@ function App() {
   async function loadGameDashboard() {
     setRecentLoading(true);
     try {
+      // 일반 사용자는 게임 기록/통계만, admin은 운영 상태까지 한 번에 갱신한다.
       const statusRequest = authUser?.isAdmin
         ? fetch(apiUrl("/admin/status"), { credentials: "include" })
         : Promise.resolve(null);

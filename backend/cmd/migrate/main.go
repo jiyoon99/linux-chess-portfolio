@@ -16,6 +16,7 @@ func main() {
 		fatalf("DATABASE_URL is required")
 	}
 
+	// 컨테이너 안에서는 SQL 파일이 없을 수 있어 기본 migration을 바이너리에 함께 넣어 둔다.
 	path := os.Getenv("MIGRATION_FILE")
 	sql := []byte(defaultMigration)
 	if path != "" {
@@ -37,6 +38,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
+	// migration은 배포 절차에서 명시적으로 실행하는 운영 명령이다.
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		fatalf("connect database: %v", err)
