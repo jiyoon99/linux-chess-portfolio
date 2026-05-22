@@ -13,6 +13,7 @@
 
 body {
   margin: 0;
+  overflow-x: hidden;
 }
 
 button {
@@ -21,7 +22,8 @@ button {
 
 .shell {
   min-height: 100vh;
-  padding: 24px;
+  min-height: 100dvh;
+  padding: clamp(10px, 2.5vw, 24px);
 }
 
 .topbar {
@@ -33,11 +35,12 @@ button {
   margin: 0 auto 20px;
   max-width: 1220px;
   padding-bottom: 14px;
+  width: 100%;
 }
 
 h1 {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(34px, 5vw, 60px);
+  font-size: clamp(32px, 5vw, 60px);
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1;
@@ -67,6 +70,7 @@ p {
   font-weight: 800;
   gap: 8px;
   min-height: 44px;
+  min-width: 0;
   padding: 0 16px;
 }
 
@@ -86,16 +90,18 @@ p {
   align-items: start;
   display: grid;
   gap: 24px;
-  grid-template-columns: minmax(340px, 760px) minmax(280px, 360px);
+  grid-template-columns: minmax(0, 760px) minmax(280px, 360px);
   justify-content: center;
   margin: 0 auto;
   max-width: 1220px;
+  width: 100%;
 }
 
 .boardPanel {
   display: grid;
   gap: 12px;
   min-width: 0;
+  width: 100%;
 }
 
 .playerStrip {
@@ -185,7 +191,7 @@ p {
   justify-self: center;
   padding: 12px;
   position: relative;
-  width: fit-content;
+  width: min(100%, 696px);
 }
 
 .fileLabels,
@@ -203,7 +209,7 @@ p {
   line-height: 20px;
   margin: 0;
   text-align: center;
-  width: min(72vw, 620px, calc(100vh - 300px));
+  width: calc(100% - 44px);
 }
 
 .topFiles {
@@ -212,9 +218,10 @@ p {
 
 .boardRows {
   display: grid;
-  grid-template-columns: 18px minmax(280px, min(72vw, 620px, calc(100vh - 300px))) 18px;
+  grid-template-columns: 18px minmax(0, 1fr) 18px;
   gap: 4px;
   justify-self: center;
+  width: 100%;
 }
 
 .rankLabels {
@@ -260,7 +267,7 @@ p {
 
 .piece {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(30px, 7vw, 72px);
+  font-size: clamp(24px, 8vw, 72px);
   line-height: 1;
   position: relative;
   z-index: 2;
@@ -370,6 +377,7 @@ p {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-width: 0;
 }
 
 .panel {
@@ -377,6 +385,7 @@ p {
   border: 1px solid #d2b98d;
   border-radius: 8px;
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.22);
+  min-width: 0;
   padding: 16px;
 }
 
@@ -413,7 +422,7 @@ p {
   display: grid;
   font-size: 13px;
   gap: 8px;
-  grid-template-columns: auto 1fr auto 1fr auto 1fr auto 1fr;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   min-height: 42px;
   padding: 10px 0;
 }
@@ -428,7 +437,7 @@ p {
   color: #2c2119;
   font-size: 13px;
   overflow-wrap: anywhere;
-  text-align: right;
+  text-align: left;
   text-transform: capitalize;
 }
 
@@ -649,7 +658,7 @@ p {
 .profileStats {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .profileStats span {
@@ -705,6 +714,7 @@ p {
 .historyMeta {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: space-between;
 }
@@ -741,6 +751,8 @@ p {
   display: grid;
   gap: 12px;
   max-width: 620px;
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
   padding: 18px;
   width: min(100%, 620px);
 }
@@ -801,7 +813,7 @@ p {
 .detailGrid {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .detailGrid span {
@@ -841,6 +853,7 @@ p {
 .metric {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 16px;
   padding: 8px 0;
@@ -915,7 +928,7 @@ p {
 .roomJoin {
   display: grid;
   gap: 8px;
-  grid-template-columns: 1fr 76px;
+  grid-template-columns: minmax(0, 1fr) 76px;
 }
 
 .roomJoin input {
@@ -994,7 +1007,7 @@ p {
 .scoreRow {
   align-items: center;
   display: grid;
-  grid-template-columns: 44px 1fr 1fr;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr);
   min-height: 34px;
 }
 
@@ -1096,6 +1109,8 @@ p {
   display: grid;
   gap: 12px;
   max-width: 420px;
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
   padding: 18px;
   pointer-events: auto;
   text-align: center;
@@ -1157,24 +1172,16 @@ p {
     grid-template-columns: 1fr;
   }
 
-  .board {
+  .side {
     width: 100%;
-  }
-
-  .boardFrame {
-    width: 100%;
-  }
-
-  .fileLabels {
-    width: min(calc(100vw - 76px), 620px);
-  }
-
-  .boardRows {
-    grid-template-columns: 18px minmax(0, min(calc(100vw - 76px), 620px)) 18px;
   }
 }
 
 @media (max-width: 520px) {
+  .topbar {
+    gap: 14px;
+  }
+
   .actions button {
     flex: 1 1 calc(50% - 8px);
     justify-content: center;
@@ -1198,7 +1205,76 @@ p {
     grid-template-columns: 1fr 1fr;
   }
 
+  .profileStats,
+  .aiPicker div {
+    grid-template-columns: 1fr;
+  }
+
   .roomJoin {
+    grid-template-columns: 1fr;
+  }
+
+  .gameBoxHeader,
+  .adminUsers div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 380px) {
+  .shell {
+    padding: 10px;
+  }
+
+  h1 {
+    font-size: 30px;
+  }
+
+  .actions button {
+    flex-basis: 100%;
+  }
+
+  .actions button:last-child {
+    flex: 0 0 44px;
+  }
+
+  .boardFrame {
+    padding: 6px;
+  }
+
+  .boardRows {
+    grid-template-columns: 14px minmax(0, 1fr) 14px;
+    gap: 2px;
+  }
+
+  .fileLabels {
+    font-size: 12px;
+    line-height: 18px;
+    width: calc(100% - 32px);
+  }
+
+  .rankLabels {
+    font-size: 12px;
+  }
+
+  .playerStrip {
+    grid-template-columns: 36px 1fr 12px;
+    padding: 8px;
+  }
+
+  .avatar {
+    font-size: 20px;
+    height: 36px;
+    width: 36px;
+  }
+
+  .panel {
+    padding: 12px;
+  }
+
+  .clockGrid,
+  .endBox div,
+  .promotionChoices {
     grid-template-columns: 1fr;
   }
 }
