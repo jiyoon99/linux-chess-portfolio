@@ -26,6 +26,8 @@ Edit `.env.prod`:
 nano .env.prod
 ```
 
+Set `ALLOWED_ORIGINS` to the public site origin, for example `https://chess.example.com`, so production WebSocket upgrades reject unexpected browser origins.
+
 Start the stack:
 
 ```bash

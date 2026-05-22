@@ -20,6 +20,7 @@
 	reverse_proxy /admin/* backend:3000
 	reverse_proxy /health backend:3000
 	reverse_proxy /ready backend:3000
+	reverse_proxy /metrics backend:3000
 
 	reverse_proxy frontend:80
 }

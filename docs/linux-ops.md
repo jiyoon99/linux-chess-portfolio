@@ -112,6 +112,7 @@ Use `docs/incident-runbook.md` for triage commands and common failure modes.
 - HttpOnly cookie sessions
 - PBKDF2-SHA256 password hashing
 - Auth endpoint rate limiting
+- WebSocket origin checks with `ALLOWED_ORIGINS`
 - Panic recovery middleware
 - Security headers:
   - `X-Content-Type-Options`

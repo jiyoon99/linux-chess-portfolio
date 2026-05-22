@@ -69,6 +69,7 @@ Operational docs:
 - `docs/load-test.md`
 - `docs/operations-checklist.md`
 - `docs/production-deploy.md`
+- `docs/portfolio-audit.md`
 - `docs/roadmap.md`
 
 ## Architecture
@@ -133,6 +134,12 @@ curl http://localhost:3000/metrics
 
 ```bash
 export ADMIN_USERS=admin,gi990422
+```
+
+For production WebSocket origin checks, configure the public site origin:
+
+```bash
+export ALLOWED_ORIGINS=https://chess.example.com
 ```
 
 ## Stockfish AI

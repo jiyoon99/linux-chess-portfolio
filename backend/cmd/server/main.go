@@ -15,6 +15,7 @@ import (
 	mrand "math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -155,7 +156,7 @@ type statusRecorder struct {
 
 var (
 	upgrader = websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool { return true },
+		CheckOrigin: checkWebSocketOrigin,
 	}
 	stateMu sync.Mutex
 	waiting []*client
@@ -1075,6 +1076,62 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 
 func isSecureRequest(r *http.Request) bool {
 	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+func checkWebSocketOrigin(r *http.Request) bool {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return true
+	}
+
+	originURL, err := url.Parse(origin)
+	if err != nil || originURL.Host == "" {
+		return false
+	}
+
+	requestHost := forwardedHost(r)
+	if strings.EqualFold(originURL.Host, requestHost) {
+		return true
+	}
+
+	if isLoopbackHost(originURL.Hostname()) && isLoopbackHost(hostnameOnly(requestHost)) {
+		return true
+	}
+
+	for _, allowed := range strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",") {
+		allowed = strings.TrimSpace(allowed)
+		if allowed == "" {
+			continue
+		}
+		allowedURL, err := url.Parse(allowed)
+		if err == nil && allowedURL.Host != "" && strings.EqualFold(originURL.Host, allowedURL.Host) {
+			return true
+		}
+		if strings.EqualFold(origin, allowed) {
+			return true
+		}
+	}
+	return false
+}
+
+func forwardedHost(r *http.Request) string {
+	if host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); host != "" {
+		return strings.Split(host, ",")[0]
+	}
+	return r.Host
+}
+
+func hostnameOnly(host string) string {
+	name, _, err := net.SplitHostPort(host)
+	if err == nil {
+		return name
+	}
+	return host
+}
+
+func isLoopbackHost(host string) bool {
+	host = strings.Trim(strings.ToLower(host), "[]")
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {

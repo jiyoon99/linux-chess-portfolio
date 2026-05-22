@@ -43,6 +43,38 @@ func TestCoordinateMoveOmitsPromotionUnlessPawnReachesBackRank(t *testing.T) {
 	}
 }
 
+func TestWebSocketOriginPolicy(t *testing.T) {
+	t.Setenv("ALLOWED_ORIGINS", "https://chess.example.com")
+
+	sameHost := httptest.NewRequest(http.MethodGet, "http://chess.example.com/ws", nil)
+	sameHost.Host = "chess.example.com"
+	sameHost.Header.Set("Origin", "https://chess.example.com")
+	if !checkWebSocketOrigin(sameHost) {
+		t.Fatalf("expected same host origin to be allowed")
+	}
+
+	allowedOrigin := httptest.NewRequest(http.MethodGet, "http://backend.internal/ws", nil)
+	allowedOrigin.Host = "backend.internal"
+	allowedOrigin.Header.Set("Origin", "https://chess.example.com")
+	if !checkWebSocketOrigin(allowedOrigin) {
+		t.Fatalf("expected configured origin to be allowed")
+	}
+
+	localDev := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:3000/ws", nil)
+	localDev.Host = "127.0.0.1:3000"
+	localDev.Header.Set("Origin", "http://127.0.0.1:5173")
+	if !checkWebSocketOrigin(localDev) {
+		t.Fatalf("expected loopback development origin to be allowed")
+	}
+
+	crossSite := httptest.NewRequest(http.MethodGet, "http://chess.example.com/ws", nil)
+	crossSite.Host = "chess.example.com"
+	crossSite.Header.Set("Origin", "https://evil.example.net")
+	if checkWebSocketOrigin(crossSite) {
+		t.Fatalf("expected cross-site origin to be rejected")
+	}
+}
+
 func TestWebSocketMatchAndMove(t *testing.T) {
 	stateMu.Lock()
 	waiting = nil
