@@ -393,6 +393,10 @@ func TestRegisterLoginMeAndLogout(t *testing.T) {
 	if sessionCookie == "" {
 		t.Fatalf("expected session cookie after register")
 	}
+	csrfCookie := firstCookie(registerResponse.Result(), "chess_csrf")
+	if csrfCookie == "" {
+		t.Fatalf("expected csrf cookie after register")
+	}
 
 	meRequest := httptest.NewRequest(http.MethodGet, "/auth/me", nil)
 	meRequest.Header.Set("Cookie", "chess_session="+sessionCookie)
@@ -403,7 +407,8 @@ func TestRegisterLoginMeAndLogout(t *testing.T) {
 	}
 
 	logoutRequest := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
-	logoutRequest.Header.Set("Cookie", "chess_session="+sessionCookie)
+	logoutRequest.Header.Set("Cookie", "chess_session="+sessionCookie+"; chess_csrf="+csrfCookie)
+	logoutRequest.Header.Set("X-CSRF-Token", csrfCookie)
 	logoutResponse := httptest.NewRecorder()
 	logoutHandler(logoutResponse, logoutRequest)
 	if logoutResponse.Code != http.StatusOK {
@@ -418,6 +423,33 @@ func TestRegisterLoginMeAndLogout(t *testing.T) {
 	loginHandler(loginResponse, loginRequest)
 	if loginResponse.Code != http.StatusOK {
 		t.Fatalf("expected login status 200, got %d", loginResponse.Code)
+	}
+}
+
+func TestLogoutRequiresCSRFToken(t *testing.T) {
+	resetAuthState()
+	account := userAccount{ID: "u1", Username: "player", CreatedAt: time.Now().UTC()}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	startSession(response, request, account)
+	sessionCookie := firstCookie(response.Result(), "chess_session")
+	csrfCookie := firstCookie(response.Result(), "chess_csrf")
+
+	missingHeader := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
+	missingHeader.Header.Set("Cookie", "chess_session="+sessionCookie+"; chess_csrf="+csrfCookie)
+	missingResponse := httptest.NewRecorder()
+	logoutHandler(missingResponse, missingHeader)
+	if missingResponse.Code != http.StatusForbidden {
+		t.Fatalf("expected missing csrf status 403, got %d", missingResponse.Code)
+	}
+
+	valid := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
+	valid.Header.Set("Cookie", "chess_session="+sessionCookie+"; chess_csrf="+csrfCookie)
+	valid.Header.Set("X-CSRF-Token", csrfCookie)
+	validResponse := httptest.NewRecorder()
+	logoutHandler(validResponse, valid)
+	if validResponse.Code != http.StatusOK {
+		t.Fatalf("expected valid csrf status 200, got %d", validResponse.Code)
 	}
 }
 
@@ -684,7 +716,7 @@ func resetAuthState() {
 	authMu.Lock()
 	defer authMu.Unlock()
 	memoryUsers = map[string]userAccount{}
-	sessions = map[string]userAccount{}
+	sessions = map[string]sessionRecord{}
 	rateMu.Lock()
 	defer rateMu.Unlock()
 	authBuckets = map[string]*rateBucket{}

@@ -13,6 +13,7 @@
     "build": "mkdir -p backend/dist && go build -buildvcs=false -o backend/dist/chess-server ./backend/cmd/server && npm run build -w frontend",
     "lint": "go test ./backend/... && npm run lint -w frontend",
     "smoke": "playwright test",
+    "migrate": "go run ./backend/cmd/migrate",
     "loadtest": "go run ./backend/cmd/loadtest -url ws://localhost:8080/ws -clients 20"
   },
   "devDependencies": {

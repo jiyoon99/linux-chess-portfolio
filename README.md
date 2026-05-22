@@ -6,6 +6,12 @@ This project is designed to show how I build, package, monitor, and document a s
 
 ![Linux Chess demo](docs/assets/linux-chess-demo.png)
 
+Observability screenshots:
+
+- [Prometheus targets](docs/assets/observability/prometheus-targets.png)
+- [Grafana dashboard](docs/assets/observability/grafana-dashboard.png)
+- [Alertmanager alerts](docs/assets/observability/alertmanager-alerts.png)
+
 ## Portfolio Summary
 
 **Target roles:** backend developer, junior DevOps engineer, Linux server operator, full-stack developer with infrastructure responsibilities.
@@ -194,6 +200,7 @@ After `docker compose up --build`, open:
 
 - App: `http://localhost:8080`
 - Prometheus: `http://localhost:9090`
+- Alertmanager: `http://localhost:9093`
 - Grafana: `http://localhost:3001` (`admin` / `chess`)
 
 Prometheus loads alert rules from `infra/prometheus/alerts.yml`, including backend scrape failures and elevated WebSocket disconnect rates.
@@ -207,6 +214,12 @@ npm run lint
 npm run build
 ```
 
+Apply the PostgreSQL schema explicitly when using a database:
+
+```bash
+DATABASE_URL=postgres://chess:chess@localhost:5432/chess npm run migrate
+```
+
 Run the browser smoke test after installing the Chromium browser once:
 
 ```bash
@@ -214,7 +227,7 @@ npx playwright install chromium
 npm run smoke
 ```
 
-The smoke test starts the Go backend and Vite frontend, registers a test account, starts an AI game, and runs analysis.
+The smoke tests start the Go backend and Vite frontend, then cover registration, AI analysis, private room join, resignation, and saved game detail.
 
 ## Production HTTPS
 

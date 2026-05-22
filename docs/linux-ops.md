@@ -63,6 +63,7 @@ Docker Compose includes:
 
 - Prometheus configured by `infra/prometheus/prometheus.yml`
 - Alert rules configured by `infra/prometheus/alerts.yml`
+- Alertmanager configured by `infra/alertmanager/alertmanager.yml`
 - Grafana datasource provisioning in `infra/grafana/provisioning/datasources/prometheus.yml`
 - Grafana dashboard provisioning in `infra/grafana/dashboards/chess-overview.json`
 
@@ -70,7 +71,14 @@ Local URLs:
 
 - Application through Nginx: `http://localhost:8080`
 - Prometheus: `http://localhost:9090`
+- Alertmanager: `http://localhost:9093`
 - Grafana: `http://localhost:3001` (`admin` / `chess`)
+
+Screenshots for portfolio review:
+
+- `docs/assets/observability/prometheus-targets.png`
+- `docs/assets/observability/grafana-dashboard.png`
+- `docs/assets/observability/alertmanager-alerts.png`
 
 Useful Prometheus queries:
 
@@ -110,6 +118,8 @@ Use `docs/incident-runbook.md` for triage commands and common failure modes.
 ## Security Controls
 
 - HttpOnly cookie sessions
+- Redis-backed session cache when `REDIS_URL` is configured
+- Double-submit CSRF token for cookie-authenticated POST routes
 - PBKDF2-SHA256 password hashing
 - Auth endpoint rate limiting
 - WebSocket origin checks with `ALLOWED_ORIGINS`

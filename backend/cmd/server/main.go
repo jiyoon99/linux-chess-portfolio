@@ -89,6 +89,11 @@ type userAccount struct {
 	CreatedAt    time.Time
 }
 
+type sessionRecord struct {
+	Account   userAccount
+	ExpiresAt time.Time
+}
+
 type gameRecord struct {
 	ID            string    `json:"id"`
 	Mode          string    `json:"mode"`
@@ -174,7 +179,7 @@ var (
 
 	authMu        sync.Mutex
 	memoryUsers   = map[string]userAccount{}
-	sessions      = map[string]userAccount{}
+	sessions      = map[string]sessionRecord{}
 	errAuthFailed = errors.New("invalid username or password")
 
 	rateMu      sync.Mutex
@@ -483,12 +488,18 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !validateCSRF(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "CSRF token required."})
+		return
+	}
 	if cookie, err := r.Cookie("chess_session"); err == nil {
 		authMu.Lock()
 		delete(sessions, cookie.Value)
 		authMu.Unlock()
+		cacheDeleteSession(cookie.Value)
 	}
 	clearSessionCookie(w, r)
+	clearCSRFCookie(w, r)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -1037,9 +1048,12 @@ func isAdminUsername(username string) bool {
 
 func startSession(w http.ResponseWriter, r *http.Request, account userAccount) {
 	token := secureToken(32)
+	expiresAt := time.Now().UTC().Add(7 * 24 * time.Hour)
+	record := sessionRecord{Account: account, ExpiresAt: expiresAt}
 	authMu.Lock()
-	sessions[token] = account
+	sessions[token] = record
 	authMu.Unlock()
+	cacheSetSession(token, record)
 	http.SetCookie(w, &http.Cookie{
 		Name:     "chess_session",
 		Value:    token,
@@ -1049,6 +1063,7 @@ func startSession(w http.ResponseWriter, r *http.Request, account userAccount) {
 		SameSite: http.SameSiteLaxMode,
 		Secure:   isSecureRequest(r),
 	})
+	setCSRFCookie(w, r)
 }
 
 func currentUser(r *http.Request) (userAccount, bool) {
@@ -1057,9 +1072,24 @@ func currentUser(r *http.Request) (userAccount, bool) {
 		return userAccount{}, false
 	}
 	authMu.Lock()
-	defer authMu.Unlock()
-	account, ok := sessions[cookie.Value]
-	return account, ok
+	record, ok := sessions[cookie.Value]
+	if ok && time.Now().Before(record.ExpiresAt) {
+		authMu.Unlock()
+		return record.Account, true
+	}
+	if ok {
+		delete(sessions, cookie.Value)
+	}
+	authMu.Unlock()
+
+	record, ok = cacheGetSession(cookie.Value)
+	if !ok || time.Now().After(record.ExpiresAt) {
+		return userAccount{}, false
+	}
+	authMu.Lock()
+	sessions[cookie.Value] = record
+	authMu.Unlock()
+	return record.Account, true
 }
 
 func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
@@ -1072,6 +1102,42 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		Secure:   isSecureRequest(r),
 	})
+}
+
+func setCSRFCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "chess_csrf",
+		Value:    secureToken(24),
+		Path:     "/",
+		MaxAge:   int((7 * 24 * time.Hour).Seconds()),
+		HttpOnly: false,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecureRequest(r),
+	})
+}
+
+func clearCSRFCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "chess_csrf",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: false,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecureRequest(r),
+	})
+}
+
+func validateCSRF(r *http.Request) bool {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+		return true
+	}
+	cookie, err := r.Cookie("chess_csrf")
+	if err != nil || cookie.Value == "" {
+		return false
+	}
+	header := strings.TrimSpace(r.Header.Get("X-CSRF-Token"))
+	return subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(header)) == 1
 }
 
 func isSecureRequest(r *http.Request) bool {
@@ -2164,6 +2230,53 @@ func cacheSetRoom(code string, ownerID string) {
 		return
 	}
 	_ = cache.Expire(ctx, key, 15*time.Minute).Err()
+}
+
+func cacheSetSession(token string, record sessionRecord) {
+	if cache == nil || token == "" {
+		return
+	}
+	raw, err := json.Marshal(record)
+	if err != nil {
+		logJSON("error", "session_encode_failed", map[string]interface{}{"error": err.Error()})
+		return
+	}
+	ttl := time.Until(record.ExpiresAt)
+	if ttl <= 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := cache.Set(ctx, "chess:session:"+token, raw, ttl).Err(); err != nil {
+		logJSON("error", "redis_session_cache_failed", map[string]interface{}{"error": err.Error()})
+	}
+}
+
+func cacheGetSession(token string) (sessionRecord, bool) {
+	if cache == nil || token == "" {
+		return sessionRecord{}, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	raw, err := cache.Get(ctx, "chess:session:"+token).Bytes()
+	if err != nil {
+		return sessionRecord{}, false
+	}
+	var record sessionRecord
+	if err := json.Unmarshal(raw, &record); err != nil {
+		logJSON("error", "session_decode_failed", map[string]interface{}{"error": err.Error()})
+		return sessionRecord{}, false
+	}
+	return record, true
+}
+
+func cacheDeleteSession(token string) {
+	if cache == nil || token == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_ = cache.Del(ctx, "chess:session:"+token).Err()
 }
 
 func cacheDeleteRoom(code string) {

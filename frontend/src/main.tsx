@@ -115,6 +115,13 @@ function apiUrl(path: string) {
   return `${window.location.protocol}//${host}${path}`;
 }
 
+function csrfToken() {
+  return document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith("chess_csrf="))
+    ?.split("=")[1] ?? "";
+}
+
 function App() {
   const socketRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
@@ -377,7 +384,11 @@ function App() {
   async function logout() {
     setAuthLoading(true);
     try {
-      await fetch(apiUrl("/auth/logout"), { method: "POST", credentials: "include" });
+      await fetch(apiUrl("/auth/logout"), {
+        method: "POST",
+        credentials: "include",
+        headers: { "X-CSRF-Token": csrfToken() }
+      });
       setAuthUser(null);
       setRecentGames([]);
       setGameStats(null);

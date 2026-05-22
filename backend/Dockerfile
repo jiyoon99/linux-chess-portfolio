@@ -4,6 +4,7 @@ COPY go.mod go.sum* ./
 RUN go mod download
 COPY cmd ./cmd
 RUN CGO_ENABLED=0 go build -buildvcs=false -o /out/chess-server ./cmd/server
+RUN CGO_ENABLED=0 go build -buildvcs=false -o /out/chess-migrate ./cmd/migrate
 
 FROM alpine:3.20 AS runtime
 ENV STOCKFISH_PATH=/opt/stockfish/stockfish-ubuntu-x86-64-avx2
@@ -16,6 +17,7 @@ RUN apk add --no-cache ca-certificates curl tar \
   && rm /tmp/stockfish.tar \
   && adduser -D -H chess
 COPY --from=build /out/chess-server /usr/local/bin/chess-server
+COPY --from=build /out/chess-migrate /usr/local/bin/chess-migrate
 USER chess
 EXPOSE 3000
 CMD ["chess-server"]

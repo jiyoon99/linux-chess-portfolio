@@ -34,6 +34,12 @@ Start the stack:
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```
 
+Apply the database schema explicitly:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec backend chess-migrate
+```
+
 Check status:
 
 ```bash
