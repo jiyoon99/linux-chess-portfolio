@@ -14,7 +14,8 @@
     "lint": "go test ./backend/... && npm run lint -w frontend",
     "smoke": "playwright test",
     "migrate": "go run ./backend/cmd/migrate",
-    "loadtest": "go run ./backend/cmd/loadtest -url ws://localhost:8080/ws -clients 20"
+    "loadtest": "go run ./backend/cmd/loadtest -url ws://localhost:8080/ws -clients 20",
+    "preview:tunnel": "bash scripts/preview-tunnel.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0"

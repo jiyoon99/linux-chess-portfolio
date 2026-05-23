@@ -231,6 +231,18 @@ docker compose up --build
 - Alertmanager: `http://localhost:9093`
 - Grafana: `http://localhost:3001` (`admin` / `chess`)
 
+## 임시 공개 미리보기
+
+서버나 도메인 없이 다른 컴퓨터에서 잠깐 접속해보게 하려면 Cloudflare Tunnel 미리보기를 사용할 수 있습니다.
+
+```bash
+npm run preview:tunnel
+```
+
+명령이 Docker 스택을 `http://localhost:8080`으로 실행한 뒤 `https://*.trycloudflare.com` 형태의 임시 공개 주소를 출력합니다. 그 주소를 다른 사람에게 공유하면 다른 컴퓨터나 휴대폰에서 멀티플레이 체스 흐름을 테스트할 수 있습니다.
+
+자세한 내용은 `docs/preview-tunnel.md`를 참고하세요.
+
 ## 검증 방법
 
 단위 테스트, 타입 검사, 프로덕션 빌드:
