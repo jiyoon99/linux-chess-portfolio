@@ -26,6 +26,28 @@
 | 운영/배포 | Docker Compose, Nginx, Caddy, systemd, Prometheus, Grafana, Alertmanager |
 | 품질 관리 | Go 테스트, TypeScript 검사, 프로덕션 빌드, Playwright smoke test |
 
+## For Interviewers
+
+이 저장소는 "체스 게임 화면"보다 백엔드가 게임 상태를 책임지는 실시간 서비스와 Linux 운영 구성을 보여주는 포트폴리오입니다.
+
+| 평가 포인트 | 확인 위치 |
+| --- | --- |
+| 실시간 통신 | Go WebSocket game loop, room code 기반 매칭 |
+| 서버 권위 구조 | 서버 측 체스 수 검증, authoritative game state broadcast |
+| 데이터 저장 | PostgreSQL 사용자/게임/수 기록 schema, migration |
+| 런타임 캐시 | Redis room state, 진행 중 game state |
+| Linux 운영 | Docker Compose, Nginx/Caddy reverse proxy, systemd unit |
+| 관측성 | `/health`, `/ready`, `/metrics`, Prometheus, Grafana, Alertmanager |
+| 검증 | Go test, TypeScript check, production build, Playwright smoke test |
+
+면접에서 설명할 수 있는 핵심은 다음과 같습니다.
+
+- 브라우저가 아닌 서버가 체스 규칙과 게임 상태를 책임지도록 설계한 이유
+- WebSocket 연결, 방 코드 매칭, 게임 상태 broadcast가 어떤 흐름으로 동작하는지
+- PostgreSQL에는 완료된 게임 기록을, Redis에는 진행 중인 방/게임 상태를 나눠 둔 이유
+- reverse proxy, health/readiness check, metrics, alert, backup 문서가 실제 운영에서 어떤 역할을 하는지
+- 단순 기능 구현에서 끝내지 않고 테스트, smoke test, 배포/장애 대응 문서까지 포함한 이유
+
 ## 지원 직무와 연결되는 역량
 
 이 프로젝트는 다음 직무에 맞춰 설명할 수 있도록 구성했습니다.
