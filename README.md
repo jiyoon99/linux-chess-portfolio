@@ -12,7 +12,7 @@
 - [Grafana dashboard](docs/assets/observability/grafana-dashboard.png)
 - [Alertmanager alerts](docs/assets/observability/alertmanager-alerts.png)
 
-## 프로젝트 요약
+## Project Summary / 프로젝트 요약
 
 | 항목 | 내용 |
 | --- | --- |
@@ -26,7 +26,7 @@
 | 운영/배포 | Docker Compose, Nginx, Caddy, systemd, Prometheus, Grafana, Alertmanager |
 | 품질 관리 | Go 테스트, TypeScript 검사, 프로덕션 빌드, Playwright smoke test |
 
-## For Interviewers
+## For Interviewers / 면접관 참고
 
 이 저장소는 "체스 게임 화면"보다 백엔드가 게임 상태를 책임지는 실시간 서비스와 Linux 운영 구성을 보여주는 포트폴리오입니다.
 
@@ -48,7 +48,7 @@
 - reverse proxy, health/readiness check, metrics, alert, backup 문서가 실제 운영에서 어떤 역할을 하는지
 - 단순 기능 구현에서 끝내지 않고 테스트, smoke test, 배포/장애 대응 문서까지 포함한 이유
 
-## 지원 직무와 연결되는 역량
+## Role-Relevant Skills / 지원 직무와 연결되는 역량
 
 이 프로젝트는 다음 직무에 맞춰 설명할 수 있도록 구성했습니다.
 
@@ -59,7 +59,7 @@
 
 핵심은 “체스 게임을 만들었다”가 아니라, 사용자가 접속하고 게임을 진행하는 실제 서비스를 Linux 환경에서 운영 가능한 형태로 만들었다는 점입니다.
 
-## 주요 구현 내용
+## Key Implementations / 주요 구현 내용
 
 - WebSocket 기반 실시간 체스 대국
 - 브라우저가 아닌 서버에서 체스 수 검증
@@ -78,7 +78,7 @@
 - 백업/복구, 장애 대응, 배포 체크리스트 문서화
 - GitHub Actions CI 및 Playwright 브라우저 smoke test
 
-## 기술별 포트폴리오 포인트
+## Technical Portfolio Points / 기술별 포트폴리오 포인트
 
 | 영역 | 확인할 수 있는 내용 |
 | --- | --- |
@@ -90,13 +90,13 @@
 | Observability | `/metrics`, Prometheus 설정, Grafana 대시보드, alert rule, JSON 로그 |
 | Quality | Go test, TypeScript check, production build, Playwright smoke test |
 
-## 면접에서 설명할 수 있는 내용
+## Interview Talking Points / 면접에서 설명할 수 있는 내용
 
 이 프로젝트는 프론트엔드에서만 동작하는 게임 데모가 아니라, 백엔드가 게임 규칙과 상태를 책임지는 서비스로 설계했습니다. 사용자는 WebSocket을 통해 실시간으로 대국을 진행하고, 서버는 모든 수를 검증한 뒤 권위 있는 게임 상태만 클라이언트에 전달합니다.
 
 완료된 게임은 PostgreSQL에 저장할 수 있고, 진행 중인 방과 게임 상태는 Redis를 통해 런타임 캐시로 관리합니다. 운영 관점에서는 health check, readiness check, Prometheus metrics, Grafana dashboard, alert rule, backup script, systemd unit, reverse proxy 설정을 포함해 Linux 서버에서 어떻게 운영할지까지 문서화했습니다.
 
-## 아키텍처
+## Architecture / 아키텍처
 
 ```mermaid
 flowchart LR
@@ -110,7 +110,7 @@ flowchart LR
   Grafana[Grafana] --> Prometheus
 ```
 
-## 디렉터리 구조
+## Directory Structure / 디렉터리 구조
 
 ```text
 backend/       Go WebSocket 및 REST API 서버
@@ -132,7 +132,7 @@ tests/         Playwright smoke test
 - `docs/portfolio-audit.md`
 - `docs/roadmap.md`
 
-## 로컬 실행 방법
+## Local Run / 로컬 실행 방법
 
 의존성 설치:
 
@@ -165,7 +165,7 @@ npm run dev:postgres
 npm run dev:backend:db
 ```
 
-## 주요 API
+## Main APIs / 주요 API
 
 ```bash
 curl -X POST http://localhost:3000/auth/register \
@@ -193,7 +193,7 @@ export ADMIN_USERS=admin,gi990422
 export ALLOWED_ORIGINS=https://chess.example.com
 ```
 
-## Stockfish AI
+## Stockfish AI / Stockfish 인공지능
 
 백엔드는 UCI 프로토콜을 통해 Stockfish를 사용할 수 있습니다. 탐색 순서는 다음과 같습니다.
 
@@ -209,7 +209,7 @@ Debian/Ubuntu에서는 다음 명령으로 설치할 수 있습니다.
 sudo apt install stockfish
 ```
 
-## 데이터 저장 및 캐시
+## Data Storage and Cache / 데이터 저장 및 캐시
 
 `DATABASE_URL`을 설정하면 PostgreSQL 저장소를 사용합니다.
 
@@ -229,7 +229,7 @@ DATABASE_URL=postgres://chess:chess@localhost:5432/chess npm run migrate
 export REDIS_URL=redis://localhost:6379
 ```
 
-## Docker 운영 구성
+## Docker Operations / Docker 운영 구성
 
 ```bash
 docker compose up --build
@@ -253,7 +253,7 @@ docker compose up --build
 - Alertmanager: `http://localhost:9093`
 - Grafana: `http://localhost:3001` (`admin` / `chess`)
 
-## 임시 공개 미리보기
+## Temporary Public Preview / 임시 공개 미리보기
 
 서버나 도메인 없이 다른 컴퓨터에서 잠깐 접속해보게 하려면 Cloudflare Tunnel 미리보기를 사용할 수 있습니다.
 
@@ -265,7 +265,7 @@ npm run preview:tunnel
 
 자세한 내용은 `docs/preview-tunnel.md`를 참고하세요.
 
-## 검증 방법
+## Validation / 검증 방법
 
 단위 테스트, 타입 검사, 프로덕션 빌드:
 
@@ -283,7 +283,7 @@ npm run smoke
 
 Smoke test는 회원가입, AI 게임 시작, 분석 요청, 비공개 방 참가, 기권, 저장된 게임 상세 조회 흐름을 확인합니다.
 
-## 배포 문서
+## Deployment Documentation / 배포 문서
 
 운영용 Docker Compose 구성:
 
@@ -294,7 +294,7 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 
 VPS, DNS, HTTPS, 방화벽, 백업, 운영 점검 절차는 `docs/production-deploy.md`와 `docs/operations-checklist.md`에 정리되어 있습니다.
 
-## 시연 순서
+## Demo Flow / 시연 순서
 
 포트폴리오 리뷰 또는 면접 시 다음 순서로 보여줄 수 있습니다.
 
@@ -310,7 +310,7 @@ VPS, DNS, HTTPS, 방화벽, 백업, 운영 점검 절차는 `docs/production-dep
 10. Docker Compose, Nginx/Caddy, systemd, backup script 설명
 11. `npm run smoke`로 자동화된 브라우저 검증 실행
 
-## 프로젝트를 통해 보여주고 싶은 점
+## What This Project Demonstrates / 프로젝트를 통해 보여주고 싶은 점
 
 이 저장소는 UI만 있는 미니 프로젝트가 아니라, 작은 기능이라도 실제 서비스처럼 설계하고 운영할 수 있다는 점을 보여주기 위해 만들었습니다.
 
