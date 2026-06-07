@@ -53,6 +53,7 @@ type game struct {
 	persisted bool
 	counted   bool
 	moves     []string
+	rematch   map[string]bool
 	createdAt time.Time
 	mu        sync.Mutex
 }
@@ -644,6 +645,8 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			handleMove(c, msg.Payload)
 		case "game:resign":
 			handleResign(c)
+		case "game:rematch":
+			handleRematch(c)
 		case "game:analysis":
 			handleAnalysis(c)
 		default:
@@ -704,6 +707,25 @@ func startGameWithRoomLocked(white *client, black *client, roomCode string) {
 	send(black, "game:start", gameView(g, chess.Black, nil))
 }
 
+func startBotGameLocked(c *client, level string) {
+	g := &game{
+		id:        randomID(10),
+		board:     chess.NewGame(),
+		white:     c,
+		aiColor:   chess.Black,
+		aiLevel:   normalizeAILevel(level),
+		aiEngine:  aiEngineName(),
+		moves:     []string{},
+		createdAt: time.Now().UTC(),
+	}
+
+	c.gameID = g.id
+	c.color = chess.White
+	games[g.id] = g
+	cacheSetGame(g)
+	send(c, "game:start", gameView(g, chess.White, map[string]interface{}{"mode": "bot"}))
+}
+
 func handleCreateRoom(c *client) {
 	stateMu.Lock()
 	defer stateMu.Unlock()
@@ -756,22 +778,7 @@ func handleBotJoin(c *client, raw json.RawMessage) {
 	}
 
 	removeWaitingLocked(c)
-	g := &game{
-		id:        randomID(10),
-		board:     chess.NewGame(),
-		white:     c,
-		aiColor:   chess.Black,
-		aiLevel:   level,
-		aiEngine:  aiEngineName(),
-		moves:     []string{},
-		createdAt: time.Now().UTC(),
-	}
-
-	c.gameID = g.id
-	c.color = chess.White
-	games[g.id] = g
-	cacheSetGame(g)
-	send(c, "game:start", gameView(g, chess.White, map[string]interface{}{"mode": "bot"}))
+	startBotGameLocked(c, level)
 }
 
 func handleMove(c *client, raw json.RawMessage) {
@@ -841,6 +848,80 @@ func handleResign(c *client) {
 	cacheSetGame(g)
 	broadcast(g, "game:update", gameView(g, chess.NoColor, map[string]interface{}{"resigned": colorToken(c.color)}))
 	persistIfFinished(g)
+}
+
+func handleRematch(c *client) {
+	stateMu.Lock()
+	g := games[c.gameID]
+	stateMu.Unlock()
+	if g == nil {
+		send(c, "game:error", map[string]string{"message": "No active game."})
+		return
+	}
+
+	g.mu.Lock()
+	if g.board.Outcome() == chess.NoOutcome {
+		g.mu.Unlock()
+		send(c, "game:error", map[string]string{"message": "Game is still in progress."})
+		return
+	}
+
+	if g.aiColor != chess.NoColor {
+		level := g.aiLevel
+		g.mu.Unlock()
+		stateMu.Lock()
+		delete(games, g.id)
+		cacheDeleteGame(g.id)
+		stateMu.Unlock()
+		startBotGameLocked(c, level)
+		return
+	}
+
+	if g.rematch == nil {
+		g.rematch = map[string]bool{}
+	}
+	g.rematch[c.id] = true
+	whiteReady := g.white != nil && g.rematch[g.white.id]
+	blackReady := g.black != nil && g.rematch[g.black.id]
+	white := g.white
+	black := g.black
+	roomCode := g.roomCode
+	g.mu.Unlock()
+
+	if !whiteReady || !blackReady {
+		send(c, "game:rematch_requested", map[string]interface{}{
+			"gameId":      g.id,
+			"rematchReady": false,
+		})
+		if opponent := rematchOpponent(g, c); opponent != nil {
+			send(opponent, "game:rematch_requested", map[string]interface{}{
+				"gameId":      g.id,
+				"rematchReady": false,
+			})
+		}
+		return
+	}
+
+	stateMu.Lock()
+	delete(games, g.id)
+	cacheDeleteGame(g.id)
+	if white != nil && black != nil {
+		startGameWithRoomLocked(black, white, roomCode)
+	}
+	stateMu.Unlock()
+}
+
+func rematchOpponent(g *game, c *client) *client {
+	if g == nil {
+		return nil
+	}
+	if g.white == c {
+		return g.black
+	}
+	if g.black == c {
+		return g.white
+	}
+	return nil
 }
 
 func handleAnalysis(c *client) {

@@ -281,6 +281,12 @@ func TestAuthenticatedBotGamePersistsHistoryAndStats(t *testing.T) {
 		t.Fatalf("expected resignation update, got %#v", resignUpdate.Payload)
 	}
 
+	writeTestMessage(t, player, "game:rematch", nil)
+	rematchStart := readTestMessage(t, player, "game:start")
+	if rematchStart.Payload["mode"] != "bot" || rematchStart.Payload["color"] != "w" {
+		t.Fatalf("expected rematch to restart bot game, got %#v", rematchStart.Payload)
+	}
+
 	recentRequest := httptest.NewRequest(http.MethodGet, "/games/recent", nil)
 	recentRequest.Header.Set("Cookie", "chess_session="+sessionCookie)
 	recentResponse := httptest.NewRecorder()

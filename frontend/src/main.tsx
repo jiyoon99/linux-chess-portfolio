@@ -158,6 +158,7 @@ function App() {
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
   const [recentLoading, setRecentLoading] = useState(false);
   const [selectedGame, setSelectedGame] = useState<GameRecord | null>(null);
+  const [replayPly, setReplayPly] = useState(0);
   const [pendingPromotion, setPendingPromotion] = useState<{ from: Square; to: Square } | null>(null);
 
   const chess = useMemo(() => new Chess(fen), [fen]);
@@ -179,6 +180,8 @@ function App() {
         .map((move) => move.to)
     );
   }, [chess, selected]);
+  const replayState = useMemo(() => buildReplayState(selectedGame, replayPly), [selectedGame, replayPly]);
+  const replayMoveRows = useMemo(() => (selectedGame ? buildMoveBook(selectedGame.moves) : []), [selectedGame]);
 
   useEffect(() => {
     // 첫 화면에서 서비스 상태와 기존 로그인 세션을 확인한 뒤 WebSocket을 연결한다.
@@ -265,6 +268,9 @@ function App() {
         setStatus("Opponent disconnected");
         setGameState("ended");
       }
+      if (message.type === "game:rematch_requested") {
+        setStatus("Rematch requested");
+      }
     });
 
     return () => {
@@ -282,6 +288,12 @@ function App() {
     }
     loadGameDashboard();
   }, [authUser?.id, gameState]);
+
+  useEffect(() => {
+    if (selectedGame) {
+      setReplayPly(selectedGame.moves.length);
+    }
+  }, [selectedGame?.id]);
 
   function joinQueue() {
     socketRef.current?.send(JSON.stringify({ type: "matchmaking:join" }));
@@ -352,6 +364,11 @@ function App() {
     setAnalysis(null);
     setAnalysisLoading(true);
     socketRef.current?.send(JSON.stringify({ type: "game:analysis" }));
+  }
+
+  function requestRematch() {
+    socketRef.current?.send(JSON.stringify({ type: "game:rematch" }));
+    setStatus(mode === "bot" ? "Starting new game" : "Rematch requested");
   }
 
   function resetSession() {
@@ -433,9 +450,14 @@ function App() {
 
   async function openGameDetail(game: GameRecord) {
     setSelectedGame(game);
+    setReplayPly(game.moves.length);
     try {
       const response = await fetch(apiUrl(`/games/detail?id=${encodeURIComponent(game.id)}`), { credentials: "include" });
-      if (response.ok) setSelectedGame(await response.json());
+      if (response.ok) {
+        const detail = (await response.json()) as GameRecord;
+        setSelectedGame(detail);
+        setReplayPly(detail.moves.length);
+      }
     } catch {
       setSelectedGame(game);
     }
@@ -484,59 +506,16 @@ function App() {
                 <span>{resultBanner.detail}</span>
               </div>
             ) : null}
-            <div className="fileLabels topFiles">
-              {orientation.map((file) => (
-                <span key={`top-${file}`}>{file}</span>
-              ))}
-            </div>
-            <div className="boardRows">
-              <div className="rankLabels">
-                {ranks.map((rank) => (
-                  <span key={`left-${rank}`}>{rank}</span>
-                ))}
-              </div>
-              <div className="board">
-                {ranks.map((rank) =>
-                  orientation.map((file) => {
-                    const square = `${file}${rank}` as Square;
-                    const piece = chess.get(square);
-                    const light = (files.indexOf(file) + rank) % 2 === 1;
-                    const isLast = lastMove?.slice(0, 2) === square || lastMove?.slice(2, 4) === square;
-                    const isTarget = selectedTargets.has(square);
-                    const isCheckedKing = checkedKingSquare === square;
-                    return (
-                      <button
-                        className={[
-                          "square",
-                          light ? "light" : "dark",
-                          selected === square ? "selected" : "",
-                          isLast ? "lastMove" : "",
-                          isTarget ? "target" : "",
-                          isCheckedKing ? "checkedKing" : ""
-                        ].join(" ")}
-                        key={square}
-                        onClick={() => selectSquare(square)}
-                        aria-label={square}
-                      >
-                        <span className={piece ? `piece ${piece.color === "w" ? "whitePiece" : "blackPiece"}` : ""}>
-                          {piece ? pieceGlyph(piece.type, piece.color) : ""}
-                        </span>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-              <div className="rankLabels">
-                {ranks.map((rank) => (
-                  <span key={`right-${rank}`}>{rank}</span>
-                ))}
-              </div>
-            </div>
-            <div className="fileLabels">
-              {orientation.map((file) => (
-                <span key={`bottom-${file}`}>{file}</span>
-              ))}
-            </div>
+            <BoardView
+              board={chess}
+              orientation={orientation}
+              ranks={ranks}
+              lastMove={lastMove}
+              selected={selected}
+              selectedTargets={selectedTargets}
+              checkedKingSquare={checkedKingSquare}
+              onSquareClick={selectSquare}
+            />
           </div>
           <PlayerStrip
             side="bottom"
@@ -870,7 +849,7 @@ function App() {
       ) : null}
       {selectedGame ? (
         <div className="gameOverlay" role="dialog" aria-modal="true">
-          <div className="gameBox">
+          <div className="gameBox replayGameBox">
             <div className="gameBoxHeader">
               <div>
                 <strong>{gameResultText(selectedGame)}</strong>
@@ -886,6 +865,76 @@ function App() {
               <span>{selectedGame.moves.length} moves</span>
               <span>{relativeDate(selectedGame.endedAt)}</span>
               <span>{selectedGame.finalFen ? "FEN saved" : "PGN only"}</span>
+            </div>
+            <div className="replayPanel">
+              <div className="panelTitle">
+                <History size={18} />
+                Replay
+              </div>
+              <div className="replayToolbar">
+                <button onClick={() => setReplayPly(0)} disabled={replayState.totalPlies === 0 || replayPly === 0}>
+                  Start
+                </button>
+                <button onClick={() => setReplayPly((value) => Math.max(0, value - 1))} disabled={replayState.totalPlies === 0 || replayPly === 0}>
+                  Prev
+                </button>
+                <button
+                  onClick={() => setReplayPly((value) => Math.min(replayState.totalPlies, value + 1))}
+                  disabled={replayState.totalPlies === 0 || replayPly === replayState.totalPlies}
+                >
+                  Next
+                </button>
+                <button onClick={() => setReplayPly(replayState.totalPlies)} disabled={replayState.totalPlies === 0 || replayPly === replayState.totalPlies}>
+                  End
+                </button>
+                <span>
+                  {replayPly} / {replayState.totalPlies} plies
+                </span>
+              </div>
+              <div className="replayStatus">
+                <span>{replayState.board.turn() === "w" ? "White to move" : "Black to move"}</span>
+                <span>
+                  {replayState.board.isCheck()
+                    ? "Check"
+                    : replayState.totalPlies === 0
+                      ? "Initial position"
+                      : replayPly === replayState.totalPlies
+                        ? "Final position"
+                        : "Replay position"}
+                </span>
+              </div>
+              <div className="boardFrame replayBoardFrame">
+                <BoardView
+                  board={replayState.board}
+                  orientation={files}
+                  ranks={[8, 7, 6, 5, 4, 3, 2, 1]}
+                  lastMove={replayState.lastMove}
+                  interactive={false}
+                />
+              </div>
+              <div className="replayMoves">
+                <div className="panelTitle">
+                  <Swords size={18} />
+                  Move Replay
+                </div>
+                {replayMoveRows.length === 0 ? (
+                  <div className="emptyMoves">No moves recorded</div>
+                ) : (
+                  replayMoveRows.map((row) => (
+                    <div className={`scoreRow replayRow ${replayPly === row.whitePly || replayPly === row.blackPly ? "activeReplayRow" : ""}`} key={row.number}>
+                      <button className={`moveJump ${replayPly === row.whitePly ? "activeReplayMove" : ""}`} onClick={() => row.whitePly && setReplayPly(row.whitePly)} disabled={!row.whitePly}>
+                        {row.number}.
+                      </button>
+                      <button className={`moveJump ${replayPly === row.whitePly ? "activeReplayMove" : ""}`} onClick={() => row.whitePly && setReplayPly(row.whitePly)} disabled={!row.white}>
+                        {row.white || "..."}
+                      </button>
+                      <button className={`moveJump ${replayPly === row.blackPly ? "activeReplayMove" : ""}`} onClick={() => row.blackPly && setReplayPly(row.blackPly)} disabled={!row.black}>
+                        {row.black || ""}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
             <pre>{gamePGN(selectedGame)}</pre>
             {selectedGame.finalFen ? <code className="fenLine">{selectedGame.finalFen}</code> : null}
@@ -910,9 +959,9 @@ function App() {
                 <Search size={16} />
                 Analyze
               </button>
-              <button onClick={() => window.location.reload()}>
+              <button onClick={requestRematch}>
                 <RefreshCw size={16} />
-                New Game
+                {mode === "bot" ? "Play Again" : "Request Rematch"}
               </button>
             </div>
           </div>
@@ -946,6 +995,88 @@ function PlayerStrip({
       </div>
       <Circle size={10} className="turnDot" />
     </div>
+  );
+}
+
+function BoardView({
+  board,
+  orientation,
+  ranks,
+  lastMove,
+  selected,
+  selectedTargets = new Set<string>(),
+  checkedKingSquare = "",
+  interactive = true,
+  onSquareClick
+}: {
+  board: Chess;
+  orientation: string[];
+  ranks: number[];
+  lastMove?: string;
+  selected?: Square | null;
+  selectedTargets?: Set<string>;
+  checkedKingSquare?: string;
+  interactive?: boolean;
+  onSquareClick?: (square: Square) => void;
+}) {
+  return (
+    <>
+      <div className="fileLabels topFiles">
+        {orientation.map((file) => (
+          <span key={`top-${file}`}>{file}</span>
+        ))}
+      </div>
+      <div className="boardRows">
+        <div className="rankLabels">
+          {ranks.map((rank) => (
+            <span key={`left-${rank}`}>{rank}</span>
+          ))}
+        </div>
+        <div className="board">
+          {ranks.map((rank) =>
+            orientation.map((file) => {
+              const square = `${file}${rank}` as Square;
+              const piece = board.get(square);
+              const light = (files.indexOf(file) + rank) % 2 === 1;
+              const isLast = lastMove?.slice(0, 2) === square || lastMove?.slice(2, 4) === square;
+              const isTarget = selectedTargets.has(square);
+              const isCheckedKing = checkedKingSquare === square;
+              return (
+                <button
+                  className={[
+                    "square",
+                    light ? "light" : "dark",
+                    selected === square ? "selected" : "",
+                    isLast ? "lastMove" : "",
+                    isTarget ? "target" : "",
+                    isCheckedKing ? "checkedKing" : "",
+                    interactive ? "" : "replaySquare"
+                  ].join(" ")}
+                  key={square}
+                  onClick={interactive && onSquareClick ? () => onSquareClick(square) : undefined}
+                  aria-label={square}
+                  disabled={!interactive}
+                >
+                  <span className={piece ? `piece ${piece.color === "w" ? "whitePiece" : "blackPiece"}` : ""}>
+                    {piece ? pieceGlyph(piece.type, piece.color) : ""}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+        <div className="rankLabels">
+          {ranks.map((rank) => (
+            <span key={`right-${rank}`}>{rank}</span>
+          ))}
+        </div>
+      </div>
+      <div className="fileLabels">
+        {orientation.map((file) => (
+          <span key={`bottom-${file}`}>{file}</span>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -996,11 +1127,7 @@ function gameOpponentText(game: GameRecord, username: string) {
 function gamePGN(game: GameRecord) {
   const board = new Chess();
   const sanMoves = game.moves.map((moveText) => {
-    const move = board.move({
-      from: moveText.slice(0, 2),
-      to: moveText.slice(2, 4),
-      promotion: moveText.slice(4) || "q"
-    });
+    const move = playMoveText(board, moveText);
     return move?.san ?? moveText;
   });
   const moveText = sanMoves
@@ -1094,22 +1221,45 @@ function needsPromotion(chess: Chess, from: Square, to: Square) {
 
 function buildMoveBook(moves: string[]) {
   const board = new Chess();
-  const rows: { number: number; white: string; black: string }[] = [];
+  const rows: { number: number; white: string; black: string; whitePly: number; blackPly: number }[] = [];
 
   moves.forEach((moveText, index) => {
-    const move = board.move({
-      from: moveText.slice(0, 2),
-      to: moveText.slice(2, 4),
-      promotion: moveText.slice(4) || "q"
-    });
+    const move = playMoveText(board, moveText);
     const san = move?.san ?? moveText;
     const rowIndex = Math.floor(index / 2);
-    if (!rows[rowIndex]) rows[rowIndex] = { number: rowIndex + 1, white: "", black: "" };
-    if (index % 2 === 0) rows[rowIndex].white = san;
-    else rows[rowIndex].black = san;
+    if (!rows[rowIndex]) rows[rowIndex] = { number: rowIndex + 1, white: "", black: "", whitePly: 0, blackPly: 0 };
+    if (index % 2 === 0) {
+      rows[rowIndex].white = san;
+      rows[rowIndex].whitePly = index + 1;
+    } else {
+      rows[rowIndex].black = san;
+      rows[rowIndex].blackPly = index + 1;
+    }
   });
 
   return rows;
+}
+
+function buildReplayState(game: GameRecord | null, ply: number) {
+  const board = new Chess();
+  const totalPlies = game?.moves.length ?? 0;
+  const safePly = Math.max(0, Math.min(ply, totalPlies));
+  let lastMove = "";
+
+  (game?.moves ?? []).slice(0, safePly).forEach((moveText) => {
+    const move = playMoveText(board, moveText);
+    if (move) lastMove = moveText;
+  });
+
+  return { board, lastMove, totalPlies, safePly };
+}
+
+function playMoveText(board: Chess, moveText: string) {
+  return board.move({
+    from: moveText.slice(0, 2),
+    to: moveText.slice(2, 4),
+    promotion: moveText.slice(4) || "q"
+  });
 }
 
 function buildCapturedPieces(moves: string[], color?: "w" | "b") {

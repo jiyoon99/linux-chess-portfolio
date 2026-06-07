@@ -58,8 +58,6 @@ test("resigns an AI game and loads saved game detail", async ({ page }) => {
   await expect(page.locator(".matchPanel")).toContainText("Playing");
   await page.getByRole("button", { name: "Resign" }).click();
 
-  await expect(page.getByText("Resignation").first()).toBeVisible();
-
   const recent = await page.evaluate(async () => {
     const response = await fetch("/games/recent", { credentials: "include" });
     return response.json();

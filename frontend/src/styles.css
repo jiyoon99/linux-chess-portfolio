@@ -757,6 +757,11 @@ p {
   width: min(100%, 620px);
 }
 
+.replayGameBox {
+  max-width: 980px;
+  width: min(100%, 980px);
+}
+
 .gameBoxHeader {
   align-items: start;
   border-bottom: 1px solid #dfcba8;
@@ -831,6 +836,101 @@ p {
   min-width: 0;
   overflow-wrap: anywhere;
   padding: 0 8px;
+}
+
+.replayPanel {
+  display: grid;
+  gap: 10px;
+}
+
+.replayToolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.replayToolbar button {
+  background: #ead7b1;
+  border: 1px solid #d2b98d;
+  border-radius: 8px;
+  color: #2c2119;
+  cursor: pointer;
+  font-weight: 900;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.replayToolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.replayToolbar span,
+.replayStatus span {
+  color: #846f58;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.replayStatus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.replayBoardFrame {
+  margin-top: 2px;
+  width: min(100%, 696px);
+}
+
+.replaySquare {
+  cursor: default;
+}
+
+.replaySquare:disabled {
+  opacity: 1;
+}
+
+.replayMoves {
+  display: grid;
+  gap: 2px;
+}
+
+.replayRow {
+  align-items: stretch;
+}
+
+.replayRow .moveJump {
+  background: #fff9ef;
+  border: 0;
+  border-bottom: 1px solid #eadbc1;
+  color: #2c2119;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 850;
+  min-width: 0;
+  padding: 8px;
+  text-align: left;
+}
+
+.replayRow .moveJump:first-child {
+  background: #ead7b1;
+  color: #6a533e;
+}
+
+.replayRow .moveJump:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.activeReplayRow .moveJump {
+  background: #f1e2c1;
+}
+
+.activeReplayMove {
+  box-shadow: inset 0 0 0 2px #2e4539;
 }
 
 .fenLine {
