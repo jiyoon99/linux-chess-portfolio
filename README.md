@@ -12,12 +12,16 @@
 - [Grafana dashboard](docs/assets/observability/grafana-dashboard.png)
 - [Alertmanager alerts](docs/assets/observability/alertmanager-alerts.png)
 
-## Project Summary / 프로젝트 요약
+## What I Built / 만든 것
+
+브라우저끼리 상태를 맞추는 데모가 아니라 Go 서버가 체스 규칙과 게임 상태를 책임지는 실시간 서비스를 만들었습니다. 사용자는 계정을 만들고 WebSocket 대국이나 Stockfish AI 대국을 진행할 수 있으며, 완료된 게임은 PostgreSQL에 저장하고 진행 중인 방과 게임 상태는 Redis로 관리합니다.
+
+## Project Summary / 프로젝트 구성
 
 | 항목 | 내용 |
 | --- | --- |
 | 프로젝트명 | Linux Chess Portfolio |
-| 목적 | 백엔드 개발, 실시간 통신, Linux 서버 운영 역량을 보여주기 위한 포트폴리오 |
+| 목적 | 실시간 게임 서비스와 Linux 운영 구성을 하나의 실행 가능한 프로젝트로 구현 |
 | 주요 기능 | 실시간 체스 대국, AI 대국, 비공개 방 코드, 회원가입/로그인, 게임 기록, PGN 리뷰, 운영 상태 확인 |
 | 백엔드 | Go, REST API, WebSocket, 서버 측 체스 규칙 검증 |
 | 프론트엔드 | React, TypeScript, Vite, chess.js |
@@ -25,39 +29,6 @@
 | 캐시 | Redis |
 | 운영/배포 | Docker Compose, Nginx, Caddy, systemd, Prometheus, Grafana, Alertmanager |
 | 품질 관리 | Go 테스트, TypeScript 검사, 프로덕션 빌드, Playwright smoke test |
-
-## For Interviewers / 면접관 참고
-
-이 저장소는 "체스 게임 화면"보다 백엔드가 게임 상태를 책임지는 실시간 서비스와 Linux 운영 구성을 보여주는 포트폴리오입니다.
-
-| 평가 포인트 | 확인 위치 |
-| --- | --- |
-| 실시간 통신 | Go WebSocket game loop, room code 기반 매칭 |
-| 서버 권위 구조 | 서버 측 체스 수 검증, authoritative game state broadcast |
-| 데이터 저장 | PostgreSQL 사용자/게임/수 기록 schema, migration |
-| 런타임 캐시 | Redis room state, 진행 중 game state |
-| Linux 운영 | Docker Compose, Nginx/Caddy reverse proxy, systemd unit |
-| 관측성 | `/health`, `/ready`, `/metrics`, Prometheus, Grafana, Alertmanager |
-| 검증 | Go test, TypeScript check, production build, Playwright smoke test |
-
-면접에서 설명할 수 있는 핵심은 다음과 같습니다.
-
-- 브라우저가 아닌 서버가 체스 규칙과 게임 상태를 책임지도록 설계한 이유
-- WebSocket 연결, 방 코드 매칭, 게임 상태 broadcast가 어떤 흐름으로 동작하는지
-- PostgreSQL에는 완료된 게임 기록을, Redis에는 진행 중인 방/게임 상태를 나눠 둔 이유
-- reverse proxy, health/readiness check, metrics, alert, backup 문서가 실제 운영에서 어떤 역할을 하는지
-- 단순 기능 구현에서 끝내지 않고 테스트, smoke test, 배포/장애 대응 문서까지 포함한 이유
-
-## Role-Relevant Skills / 지원 직무와 연결되는 역량
-
-이 프로젝트는 다음 직무에 맞춰 설명할 수 있도록 구성했습니다.
-
-- 백엔드 개발자
-- 주니어 DevOps 엔지니어
-- Linux 서버 운영자
-- 인프라 이해도가 있는 풀스택 개발자
-
-핵심은 “체스 게임을 만들었다”가 아니라, 사용자가 접속하고 게임을 진행하는 실제 서비스를 Linux 환경에서 운영 가능한 형태로 만들었다는 점입니다.
 
 ## Key Implementations / 주요 구현 내용
 
@@ -78,23 +49,31 @@
 - 백업/복구, 장애 대응, 배포 체크리스트 문서화
 - GitHub Actions CI 및 Playwright 브라우저 smoke test
 
-## Technical Portfolio Points / 기술별 포트폴리오 포인트
+## Development / 개발 방식
 
-| 영역 | 확인할 수 있는 내용 |
-| --- | --- |
-| Backend | Go REST handler, WebSocket game loop, 인증/세션 처리, 서버 측 체스 수 검증 |
-| Frontend | React 체스 UI, 계정 패널, 게임 기록, 분석 패널, 운영 상태 패널 |
-| Database | PostgreSQL 스키마, 사용자/게임 저장, 통계 및 상세 조회 |
-| Cache | Redis room/runtime state 저장 |
-| Linux 운영 | systemd unit, Nginx/Caddy 설정, 백업 스크립트, 배포 체크리스트 |
-| Observability | `/metrics`, Prometheus 설정, Grafana 대시보드, alert rule, JSON 로그 |
-| Quality | Go test, TypeScript check, production build, Playwright smoke test |
+### Authoritative game server
 
-## Interview Talking Points / 면접에서 설명할 수 있는 내용
+- 클라이언트는 이동 요청만 보내고 Go 서버가 현재 turn, legal move, check·mate 상태를 검증합니다.
+- 검증된 상태만 WebSocket room에 broadcast해 참가자가 동일한 game state를 받도록 구성했습니다.
+- 연결 종료, 기권, 게임 종료 이벤트도 서버 상태 변경을 기준으로 처리합니다.
 
-이 프로젝트는 프론트엔드에서만 동작하는 게임 데모가 아니라, 백엔드가 게임 규칙과 상태를 책임지는 서비스로 설계했습니다. 사용자는 WebSocket을 통해 실시간으로 대국을 진행하고, 서버는 모든 수를 검증한 뒤 권위 있는 게임 상태만 클라이언트에 전달합니다.
+### Persistence and runtime state
 
-완료된 게임은 PostgreSQL에 저장할 수 있고, 진행 중인 방과 게임 상태는 Redis를 통해 런타임 캐시로 관리합니다. 운영 관점에서는 health check, readiness check, Prometheus metrics, Grafana dashboard, alert rule, backup script, systemd unit, reverse proxy 설정을 포함해 Linux 서버에서 어떻게 운영할지까지 문서화했습니다.
+- PostgreSQL에는 사용자, 완료된 게임, move history, PGN 조회에 필요한 영속 데이터를 저장합니다.
+- Redis에는 비공개 room code와 진행 중인 game state처럼 빠르게 만료·조회할 런타임 데이터를 둡니다.
+- 데이터베이스가 설정되지 않은 개발 환경에서도 실행할 수 있도록 저장소 경계를 분리했습니다.
+
+### Operations
+
+- Nginx 또는 Caddy가 정적 프론트엔드와 Go API·WebSocket 요청을 분기합니다.
+- `/health`는 프로세스 상태, `/ready`는 의존 서비스 준비 상태, `/metrics`는 Prometheus 지표를 제공합니다.
+- Docker Compose에 PostgreSQL, Redis, API, frontend, Prometheus, Grafana, Alertmanager를 함께 정의했습니다.
+- systemd unit, backup/restore script, incident runbook, production deployment 문서를 저장소에 포함했습니다.
+
+### AI opponent
+
+- Stockfish는 UCI 프로토콜로 실행하고 환경변수와 기본 경로에서 바이너리를 탐색합니다.
+- Stockfish를 사용할 수 없으면 legal move 기반 내장 heuristic AI로 전환해 게임 흐름을 유지합니다.
 
 ## Architecture / 아키텍처
 
@@ -294,9 +273,9 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 
 VPS, DNS, HTTPS, 방화벽, 백업, 운영 점검 절차는 `docs/production-deploy.md`와 `docs/operations-checklist.md`에 정리되어 있습니다.
 
-## Demo Flow / 시연 순서
+## Demo Flow / 실행 확인 흐름
 
-포트폴리오 리뷰 또는 면접 시 다음 순서로 보여줄 수 있습니다.
+다음 순서로 주요 기능과 운영 구성을 확인할 수 있습니다.
 
 1. React 클라이언트에서 회원가입 또는 로그인
 2. AI 게임 시작 또는 비공개 방 생성
@@ -309,12 +288,6 @@ VPS, DNS, HTTPS, 방화벽, 백업, 운영 점검 절차는 `docs/production-dep
 9. Alertmanager 및 alert rule 확인
 10. Docker Compose, Nginx/Caddy, systemd, backup script 설명
 11. `npm run smoke`로 자동화된 브라우저 검증 실행
-
-## What This Project Demonstrates / 프로젝트를 통해 보여주고 싶은 점
-
-이 저장소는 UI만 있는 미니 프로젝트가 아니라, 작은 기능이라도 실제 서비스처럼 설계하고 운영할 수 있다는 점을 보여주기 위해 만들었습니다.
-
-체스라는 도메인을 통해 실시간 상태 동기화와 서버 검증을 명확하게 보여주고, Linux 운영 구성으로 배포, 모니터링, 백업, 장애 대응까지 함께 설명할 수 있도록 구성했습니다.
 
 ## License / 라이선스
 
