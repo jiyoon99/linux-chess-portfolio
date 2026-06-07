@@ -891,7 +891,12 @@ function App() {
                 <strong>{gameResultText(selectedGame)}</strong>
                 <span>{gameOpponentText(selectedGame, authUser?.username ?? "")}</span>
               </div>
-              <button onClick={() => setSelectedGame(null)}>Close</button>
+              <div className="gameBoxActions">
+                <a className="downloadButton" href={gameExportUrl(selectedGame)} download={`linux-chess-${selectedGame.id}.pgn`}>
+                  Download PGN
+                </a>
+                <button onClick={() => setSelectedGame(null)}>Close</button>
+              </div>
             </div>
             <div className="detailGrid">
               <span>
@@ -1189,6 +1194,10 @@ function gamePGN(game: GameRecord) {
     "",
     `${moveText} ${result}`.trim()
   ].join("\n");
+}
+
+function gameExportUrl(game: GameRecord) {
+  return apiUrl(`/games/export?id=${encodeURIComponent(game.id)}&format=pgn`);
 }
 
 function formatPGNDate(value: string) {

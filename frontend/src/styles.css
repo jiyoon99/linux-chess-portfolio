@@ -800,6 +800,26 @@ p {
   padding: 0 12px;
 }
 
+.gameBoxActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.downloadButton {
+  align-items: center;
+  background: #6b4d22;
+  border-radius: 8px;
+  color: #f8efe0;
+  display: inline-flex;
+  font-weight: 900;
+  min-height: 36px;
+  padding: 0 12px;
+  text-decoration: none;
+}
+
 .gameBox pre {
   background: #fff9ef;
   border: 1px solid #eadbc1;

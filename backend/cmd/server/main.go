@@ -242,6 +242,7 @@ func httpHandler() http.Handler {
 	mux.HandleFunc("/games/recent", recentGamesHandler)
 	mux.HandleFunc("/games/stats", gameStatsHandler)
 	mux.HandleFunc("/games/detail", gameDetailHandler)
+	mux.HandleFunc("/games/export", gameExportHandler)
 	mux.HandleFunc("/admin/status", adminStatusHandler)
 	mux.HandleFunc("/ready", readyHandler)
 	mux.HandleFunc("/health", healthHandler)
@@ -603,6 +604,49 @@ func gameDetailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, record)
+}
+
+func gameExportHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	account, ok := currentUser(r)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in."})
+		return
+	}
+	if strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format"))) != "" && strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format"))) != "pgn" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Unsupported export format."})
+		return
+	}
+	gameID := strings.TrimSpace(r.URL.Query().Get("id"))
+	if gameID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing game id."})
+		return
+	}
+	record, err := gameForUser(r.Context(), account.ID, gameID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "Game not found."})
+			return
+		}
+		logJSON("error", "game_export_failed", map[string]interface{}{"user_id": account.ID, "game_id": gameID, "error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not export game."})
+		return
+	}
+	pgn, err := buildPGNExport(record)
+	if err != nil {
+		logJSON("error", "game_export_encode_failed", map[string]interface{}{"user_id": account.ID, "game_id": gameID, "error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not export game."})
+		return
+	}
+
+	filename := fmt.Sprintf("linux-chess-%s.pgn", record.ID)
+	w.Header().Set("Content-Type", "application/x-chess-pgn; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(pgn))
 }
 
 func adminStatusHandler(w http.ResponseWriter, r *http.Request) {
@@ -1692,6 +1736,90 @@ func gameForUser(ctx context.Context, userID string, gameID string) (gameRecord,
 		return gameRecord{}, err
 	}
 	return record, nil
+}
+
+func buildPGNExport(record gameRecord) (string, error) {
+	board := chess.NewGame(chess.TagPairs([]*chess.TagPair{
+		{Key: "Event", Value: "Linux Chess"},
+		{Key: "Site", Value: "Local"},
+		{Key: "Date", Value: pgnDate(record.EndedAt)},
+		{Key: "Round", Value: "-"},
+		{Key: "White", Value: pgnPlayerName(record.WhiteUsername, "White")},
+		{Key: "Black", Value: pgnPlayerName(record.BlackUsername, "AI")},
+		{Key: "Result", Value: pgnResult(record.Outcome)},
+		{Key: "Termination", Value: pgnTermination(record.Method)},
+		{Key: "Mode", Value: pgnMode(record.Mode)},
+	}))
+
+	notation := chess.AlgebraicNotation{}
+	moveTexts := make([]string, 0, len(record.Moves))
+	for _, moveText := range record.Moves {
+		move, err := chess.UCINotation{}.Decode(board.Position(), moveText)
+		if err != nil {
+			return "", err
+		}
+		if err := board.Move(move); err != nil {
+			return "", err
+		}
+		moveTexts = append(moveTexts, notation.Encode(board.Positions()[len(board.Moves())-1], move))
+	}
+
+	var out strings.Builder
+	for _, tag := range board.TagPairs() {
+		out.WriteString(fmt.Sprintf("[%s \"%s\"]\n", tag.Key, tag.Value))
+	}
+	out.WriteString("\n")
+	tokens := make([]string, 0, len(moveTexts))
+	for i, moveText := range moveTexts {
+		if i%2 == 0 {
+			tokens = append(tokens, fmt.Sprintf("%d. %s", (i/2)+1, moveText))
+			continue
+		}
+		tokens = append(tokens, moveText)
+	}
+	out.WriteString(strings.Join(tokens, " "))
+	out.WriteString(" ")
+	out.WriteString(pgnResult(record.Outcome))
+	return out.String(), nil
+}
+
+func pgnPlayerName(value string, fallback string) string {
+	name := strings.TrimSpace(value)
+	if name != "" {
+		return name
+	}
+	return fallback
+}
+
+func pgnResult(outcome string) string {
+	outcome = strings.TrimSpace(outcome)
+	if outcome == "" {
+		return "*"
+	}
+	return outcome
+}
+
+func pgnTermination(method string) string {
+	method = strings.TrimSpace(method)
+	if method == "" || method == "NoMethod" {
+		return "Unspecified"
+	}
+	return method
+}
+
+func pgnMode(mode string) string {
+	mode = strings.TrimSpace(mode)
+	if mode == "" {
+		return "multiplayer"
+	}
+	return mode
+}
+
+func pgnDate(value time.Time) string {
+	if value.IsZero() {
+		return "????.??.??"
+	}
+	return value.UTC().Format("2006.01.02")
 }
 
 func userResult(record gameRecord, userID string) string {

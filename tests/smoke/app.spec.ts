@@ -80,4 +80,13 @@ test("resigns an AI game and loads saved game detail", async ({ page }) => {
 
   expect(detail.id).toBe(recent.games[0].id);
   expect(detail.method).toBe("Resignation");
+
+  const pgn = await page.evaluate(async (gameId) => {
+    const response = await fetch(`/games/export?id=${encodeURIComponent(gameId)}&format=pgn`, { credentials: "include" });
+    return response.text();
+  }, recent.games[0].id);
+
+  expect(pgn).toContain(`[Event "Linux Chess"]`);
+  expect(pgn).toContain(`[Result "0-1"]`);
+  expect(pgn).toContain(`[Termination "Resignation"]`);
 });

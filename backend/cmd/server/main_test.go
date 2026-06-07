@@ -626,6 +626,26 @@ func TestRecentGamesRequiresLoginAndReturnsUserGames(t *testing.T) {
 		t.Fatalf("expected detail response to include user game, got %s", detailResponse.Body.String())
 	}
 
+	exportRequest := httptest.NewRequest(http.MethodGet, "/games/export?id=user-game&format=pgn", nil)
+	exportRequest.Header.Set("Cookie", "chess_session="+sessionCookie)
+	exportResponse := httptest.NewRecorder()
+	gameExportHandler(exportResponse, exportRequest)
+	if exportResponse.Code != http.StatusOK {
+		t.Fatalf("expected game export status 200, got %d", exportResponse.Code)
+	}
+	if got := exportResponse.Header().Get("Content-Type"); !strings.HasPrefix(got, "application/x-chess-pgn") {
+		t.Fatalf("expected PGN content type, got %q", got)
+	}
+	if got := exportResponse.Header().Get("Content-Disposition"); !strings.Contains(got, "linux-chess-user-game.pgn") {
+		t.Fatalf("expected download filename, got %q", got)
+	}
+	exportBody := exportResponse.Body.String()
+	for _, want := range []string{`[Event "Linux Chess"]`, `[White "player_one"]`, `[Result "1-0"]`, "1. e4 e5"} {
+		if !strings.Contains(exportBody, want) {
+			t.Fatalf("expected PGN body to contain %q, got %s", want, exportBody)
+		}
+	}
+
 	otherDetailRequest := httptest.NewRequest(http.MethodGet, "/games/detail?id=other-game", nil)
 	otherDetailRequest.Header.Set("Cookie", "chess_session="+sessionCookie)
 	otherDetailResponse := httptest.NewRecorder()
