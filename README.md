@@ -22,7 +22,7 @@
 | --- | --- |
 | 프로젝트명 | Linux Chess Portfolio |
 | 목적 | 실시간 게임 서비스와 Linux 운영 구성을 하나의 실행 가능한 프로젝트로 구현 |
-| 주요 기능 | 실시간 체스 대국, AI 대국, 비공개 방 코드, 회원가입/로그인, 게임 기록, PGN 리뷰, 리플레이 뷰어, 재대전, 운영 상태 확인 |
+| 주요 기능 | 실시간 체스 대국, AI 대국, 비공개 방 코드, 관전 모드, 회원가입/로그인, 게임 기록, PGN 리뷰, 리플레이 뷰어, 재대전, 운영 상태 확인 |
 | 백엔드 | Go, REST API, WebSocket, 서버 측 체스 규칙 검증 |
 | 프론트엔드 | React, TypeScript, Vite, chess.js |
 | 데이터 저장 | PostgreSQL |
@@ -36,7 +36,7 @@
 - 브라우저가 아닌 서버에서 체스 수 검증
 - Stockfish UCI 연동 및 내장 휴리스틱 AI fallback
 - 쿠키 기반 회원가입/로그인 세션
-- 최근 게임 기록, 게임 상세 조회, PGN 리뷰, 리플레이 뷰어, 재대전
+- 최근 게임 기록, 게임 상세 조회, PGN 리뷰, 리플레이 뷰어, 재대전, 관전 모드
 - 방 코드 기반 비공개 매칭
 - PostgreSQL 기반 사용자/게임 기록 저장
 - Redis 기반 방 코드 및 진행 중 게임 상태 캐시
@@ -125,11 +125,15 @@ npm install
 npm run dev:backend
 ```
 
+포트가 이미 사용 중이면 `PORT=3001 npm run dev:backend`처럼 바꿔서 띄울 수 있습니다.
+
 프론트엔드 실행:
 
 ```bash
 npm run dev:frontend
 ```
+
+프론트 개발 서버가 다른 백엔드를 바라봐야 하면 `BACKEND_PORT=3001 npm run dev:frontend`처럼 설정합니다.
 
 브라우저에서 접속:
 

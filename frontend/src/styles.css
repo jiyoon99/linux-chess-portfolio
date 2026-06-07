@@ -1028,7 +1028,7 @@ p {
 .roomJoin {
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(0, 1fr) 76px;
+  grid-template-columns: minmax(0, 1fr) 76px 76px;
 }
 
 .roomJoin input {

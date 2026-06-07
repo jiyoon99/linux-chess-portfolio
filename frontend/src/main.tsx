@@ -6,25 +6,26 @@ import "./styles.css";
 
 type ServerMessage = {
   type: string;
-  payload?: {
-    clientId?: string;
-    userId?: string;
-    username?: string;
-    gameId?: string;
-    color?: "w" | "b";
+    payload?: {
+      clientId?: string;
+      userId?: string;
+      username?: string;
+      gameId?: string;
+      color?: "w" | "b";
     fen?: string;
     turn?: "w" | "b";
     moves?: string[];
     status?: string;
     outcome?: string;
     method?: string;
-    winner?: "w" | "b" | "";
-    mode?: "multiplayer" | "bot";
-    aiColor?: "w" | "b";
-    aiLevel?: "easy" | "medium" | "hard";
-    aiEngine?: string;
-    code?: string;
-    roomCode?: string;
+      winner?: "w" | "b" | "";
+      mode?: "multiplayer" | "bot" | "spectator";
+      spectator?: boolean;
+      aiColor?: "w" | "b";
+      aiLevel?: "easy" | "medium" | "hard";
+      aiEngine?: string;
+      code?: string;
+      roomCode?: string;
     bestMove?: string;
     score?: string;
     engine?: string;
@@ -138,7 +139,7 @@ function App() {
   const [outcome, setOutcome] = useState("*");
   const [method, setMethod] = useState("NoMethod");
   const [winner, setWinner] = useState<"w" | "b" | "">("");
-  const [mode, setMode] = useState<"multiplayer" | "bot">("multiplayer");
+  const [mode, setMode] = useState<"multiplayer" | "bot" | "spectator">("multiplayer");
   const [aiColor, setAIColor] = useState<"w" | "b" | undefined>();
   const [aiLevel, setAILevel] = useState<"easy" | "medium" | "hard">("medium");
   const [aiEngine, setAIEngine] = useState("heuristic");
@@ -231,16 +232,33 @@ function App() {
         setGameState("waiting");
         setStatus(`Room ${payload.code ?? ""} waiting`);
       }
+      if (message.type === "room:watching") {
+        setRoomCode(payload.code ?? "");
+        setGameState("watching");
+        setStatus(`Watching room ${payload.code ?? ""}`);
+        setMode("spectator");
+        setColor(undefined);
+      }
+      if (message.type === "room:closed") {
+        setStatus(`Room ${payload.code ?? ""} closed`);
+        setGameState((current) => (current === "watching" ? "idle" : current));
+      }
       if (message.type === "game:start") {
-        setGameState("playing");
-        setStatus("Game started");
         setRoomCode(payload.roomCode ?? "");
         setAnalysis(null);
-        setColor(payload.color);
         setFen(payload.fen ?? new Chess().fen());
         setTurn(payload.turn ?? "w");
         setMoves(payload.moves ?? []);
         applyServerState(payload);
+        if (payload.mode === "spectator" || payload.spectator) {
+          setGameState("watching");
+          setStatus("Watching live game");
+          setColor(undefined);
+        } else {
+          setGameState("playing");
+          setStatus("Game started");
+          setColor(payload.color);
+        }
       }
       if (message.type === "game:update") {
         setFen(payload.fen ?? new Chess().fen());
@@ -249,6 +267,7 @@ function App() {
         applyServerState(payload);
         setStatus(statusText(payload.status, payload.method, payload.winner));
         if (payload.status && payload.status !== "active") setGameState("ended");
+        else if (payload.mode === "spectator" || payload.spectator) setGameState("watching");
         setSelected(null);
         setPendingPromotion(null);
       }
@@ -313,12 +332,19 @@ function App() {
     socketRef.current?.send(JSON.stringify({ type: "room:join", payload: { code } }));
   }
 
+  function watchRoom() {
+    const code = joinCode.trim().toUpperCase();
+    if (!code) return;
+    socketRef.current?.send(JSON.stringify({ type: "spectate:join", payload: { code } }));
+  }
+
   function applyServerState(payload: NonNullable<ServerMessage["payload"]>) {
     setServerStatus(payload.status ?? "active");
     setOutcome(payload.outcome ?? "*");
     setMethod(payload.method ?? "NoMethod");
     setWinner(payload.winner ?? "");
     setMode(payload.mode ?? "multiplayer");
+    if (payload.spectator) setMode("spectator");
     setAIColor(payload.aiColor);
     if (payload.aiLevel) setAILevel(payload.aiLevel);
     setAIEngine(payload.aiEngine ?? "heuristic");
@@ -471,15 +497,15 @@ function App() {
           <p>Sign in, play a match, review your history, and watch the service metrics.</p>
         </div>
         <div className="actions">
-          <button onClick={joinQueue} disabled={!connected || gameState === "waiting" || gameState === "playing"}>
+          <button onClick={joinQueue} disabled={!connected || gameState === "waiting" || gameState === "playing" || gameState === "watching"}>
             <Swords size={18} />
             Find Match
           </button>
-          <button onClick={joinBotGame} disabled={!connected || gameState === "waiting" || gameState === "playing"}>
+          <button onClick={joinBotGame} disabled={!connected || gameState === "waiting" || gameState === "playing" || gameState === "watching"}>
             <Bot size={18} />
             Play AI
           </button>
-          <button onClick={createRoom} disabled={!connected || gameState === "waiting" || gameState === "playing"}>
+          <button onClick={createRoom} disabled={!connected || gameState === "waiting" || gameState === "playing" || gameState === "watching"}>
             <DoorOpen size={18} />
             Create Room
           </button>
@@ -493,10 +519,11 @@ function App() {
         <div className="boardPanel">
           <PlayerStrip
             side="top"
-            colorLabel={opponentLabel(color, mode, aiColor)}
+            colorLabel={mode === "spectator" ? "Spectator" : opponentLabel(color, mode, aiColor)}
             active={turn !== color && gameState === "playing"}
             checked={chess.isCheck() && turn !== color}
             bot={mode === "bot"}
+            spectator={mode === "spectator"}
             captures={captured.byOpponent}
           />
           <div className="boardFrame">
@@ -519,10 +546,11 @@ function App() {
           </div>
           <PlayerStrip
             side="bottom"
-            colorLabel={color === "b" ? "Black" : "White"}
+            colorLabel={mode === "spectator" ? "Live board" : color === "b" ? "Black" : "White"}
             active={turn === color && gameState === "playing"}
             checked={chess.isCheck() && turn === color}
             bot={false}
+            spectator={mode === "spectator"}
             captures={captured.byYou}
           />
         </div>
@@ -559,7 +587,7 @@ function App() {
             </div>
             <div className="metric">
               <span>Mode</span>
-              <strong>{mode === "bot" ? "AI opponent" : "Multiplayer"}</strong>
+              <strong>{mode === "bot" ? "AI opponent" : mode === "spectator" ? "Spectator" : "Multiplayer"}</strong>
             </div>
             {mode === "bot" ? (
               <>
@@ -572,6 +600,11 @@ function App() {
                   <strong>{aiLevel}</strong>
                 </div>
               </>
+            ) : mode === "spectator" ? (
+              <div className="metric">
+                <span>Viewing</span>
+                <strong>Live game</strong>
+              </div>
             ) : (
               <div className="aiPicker">
                 <span>AI level</span>
@@ -606,10 +639,13 @@ function App() {
                 maxLength={6}
                 onChange={(event) => setJoinCode(event.target.value.replace(/[^a-z0-9]/gi, "").toUpperCase())}
                 placeholder="ABC123"
-                disabled={!connected || gameState === "playing"}
+                disabled={!connected || gameState === "playing" || gameState === "watching"}
               />
-              <button onClick={joinRoom} disabled={!connected || !joinCode.trim() || gameState === "playing"}>
+              <button onClick={joinRoom} disabled={!connected || !joinCode.trim() || gameState === "playing" || gameState === "watching"}>
                 Join
+              </button>
+              <button onClick={watchRoom} disabled={!connected || !joinCode.trim() || gameState === "playing" || gameState === "watching"}>
+                Watch
               </button>
             </div>
           </div>
@@ -959,10 +995,12 @@ function App() {
                 <Search size={16} />
                 Analyze
               </button>
-              <button onClick={requestRematch}>
-                <RefreshCw size={16} />
-                {mode === "bot" ? "Play Again" : "Request Rematch"}
-              </button>
+              {mode === "spectator" ? null : (
+                <button onClick={requestRematch}>
+                  <RefreshCw size={16} />
+                  {mode === "bot" ? "Play Again" : "Request Rematch"}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -976,6 +1014,7 @@ function PlayerStrip({
   active,
   checked,
   bot,
+  spectator,
   captures
 }: {
   side: "top" | "bottom";
@@ -983,14 +1022,15 @@ function PlayerStrip({
   active: boolean;
   checked: boolean;
   bot: boolean;
+  spectator?: boolean;
   captures: string[];
 }) {
   return (
     <div className={`playerStrip ${active ? "activePlayer" : ""} ${checked ? "checkedPlayer" : ""}`}>
-      <div className="avatar">{bot ? "AI" : colorLabel === "White" ? "♔" : "♚"}</div>
+      <div className="avatar">{spectator ? "VIEW" : bot ? "AI" : colorLabel === "White" ? "♔" : "♚"}</div>
       <div>
         <strong>{colorLabel}</strong>
-        <span>{bot ? "engine" : checked ? "in check" : active ? "on move" : "waiting"}</span>
+        <span>{spectator ? "watching live game" : bot ? "engine" : checked ? "in check" : active ? "on move" : "waiting"}</span>
         <div className="capturedPieces">{captures.map((piece, index) => <i key={`${piece}-${index}`}>{piece}</i>)}</div>
       </div>
       <Circle size={10} className="turnDot" />
@@ -1086,7 +1126,7 @@ function colorName(value?: "w" | "b" | "") {
   return "Unassigned";
 }
 
-function opponentLabel(color: "w" | "b" | undefined, mode: "multiplayer" | "bot", aiColor?: "w" | "b") {
+function opponentLabel(color: "w" | "b" | undefined, mode: "multiplayer" | "bot" | "spectator", aiColor?: "w" | "b") {
   if (mode === "bot") return `AI ${colorName(aiColor)}`;
   return color === "b" ? "White" : "Black";
 }
@@ -1096,6 +1136,7 @@ function gameStatusLabel(value: string) {
     idle: "Ready",
     waiting: "Seeking",
     playing: "Playing",
+    watching: "Watching",
     ended: "Ended",
     offline: "Offline"
   };

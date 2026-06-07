@@ -79,6 +79,7 @@ func TestWebSocketMatchAndMove(t *testing.T) {
 	stateMu.Lock()
 	waiting = nil
 	games = map[string]*game{}
+	roomSpectators = map[string]map[string]*client{}
 	stateMu.Unlock()
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -123,6 +124,76 @@ func TestWebSocketMatchAndMove(t *testing.T) {
 	update := readTestMessage(t, second, "game:update")
 	if update.Payload["turn"] != "b" {
 		t.Fatalf("expected black turn after e2e4, got %v", update.Payload["turn"])
+	}
+}
+
+func TestWebSocketSpectatorReceivesLiveRoomUpdates(t *testing.T) {
+	stateMu.Lock()
+	waiting = nil
+	games = map[string]*game{}
+	rooms = map[string]*client{}
+	roomSpectators = map[string]map[string]*client{}
+	stateMu.Unlock()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("local listener unavailable: %v", err)
+	}
+
+	server := httptest.NewUnstartedServer(httpHandler())
+	server.Listener = listener
+	server.Start()
+	defer server.Close()
+
+	url := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	owner := dialTestClient(t, url)
+	defer owner.Close()
+	spectator := dialTestClient(t, url)
+	defer spectator.Close()
+	guest := dialTestClient(t, url)
+	defer guest.Close()
+
+	readTestMessage(t, owner, "session:ready")
+	readTestMessage(t, spectator, "session:ready")
+	readTestMessage(t, guest, "session:ready")
+
+	writeTestMessage(t, owner, "room:create", nil)
+	created := readTestMessage(t, owner, "room:created")
+	readTestMessage(t, owner, "room:waiting")
+
+	roomCode, ok := created.Payload["code"].(string)
+	if !ok || roomCode == "" {
+		t.Fatalf("expected room code from create room, got %#v", created.Payload)
+	}
+
+	writeTestMessage(t, spectator, "spectate:join", map[string]string{"code": roomCode})
+	watching := readTestMessage(t, spectator, "room:watching")
+	if watching.Payload["code"] != roomCode {
+		t.Fatalf("expected watcher to attach to room, got %#v", watching.Payload)
+	}
+
+	writeTestMessage(t, guest, "room:join", map[string]string{"code": roomCode})
+	ownerStart := readTestMessage(t, owner, "game:start")
+	guestStart := readTestMessage(t, guest, "game:start")
+	spectatorStart := readTestMessage(t, spectator, "game:start")
+
+	if ownerStart.Payload["roomCode"] != roomCode || guestStart.Payload["roomCode"] != roomCode {
+		t.Fatalf("expected players to start room game, got %#v %#v", ownerStart.Payload, guestStart.Payload)
+	}
+	if spectatorStart.Payload["mode"] != "spectator" {
+		t.Fatalf("expected spectator start, got %#v", spectatorStart.Payload)
+	}
+
+	writeTestMessage(t, owner, "game:move", map[string]string{
+		"from":      "e2",
+		"to":        "e4",
+		"promotion": "q",
+	})
+	readTestMessage(t, owner, "game:update")
+	readTestMessage(t, guest, "game:update")
+	watcherUpdate := readTestMessage(t, spectator, "game:update")
+	if watcherUpdate.Payload["turn"] != "b" {
+		t.Fatalf("expected watcher to see black turn after e2e4, got %#v", watcherUpdate.Payload)
 	}
 }
 

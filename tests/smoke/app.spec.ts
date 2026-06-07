@@ -23,24 +23,33 @@ test("registers, starts an AI game, and runs analysis", async ({ page }) => {
 
 test("creates a private room and lets another browser join", async ({ browser }) => {
   const owner = await browser.newPage();
+  const watcher = await browser.newPage();
   const guest = await browser.newPage();
 
   await owner.goto("/");
+  await watcher.goto("/");
   await guest.goto("/");
   await expect(owner.getByText("Connected")).toBeVisible();
+  await expect(watcher.getByText("Connected")).toBeVisible();
   await expect(guest.getByText("Connected")).toBeVisible();
 
   await owner.getByRole("button", { name: "Create Room" }).click();
   await expect(owner.getByText(/Room [A-Z0-9]{6} waiting/)).toBeVisible();
   const roomText = await owner.locator(".metric").filter({ hasText: "Room" }).locator("strong").innerText();
 
+  await watcher.getByPlaceholder("ABC123").fill(roomText);
+  await watcher.getByRole("button", { name: "Watch" }).click();
+  await expect(watcher.getByText(/Watching room|Watching live game/)).toBeVisible();
+
   await guest.getByPlaceholder("ABC123").fill(roomText);
   await guest.getByRole("button", { name: "Join" }).click();
 
   await expect(owner.locator(".matchPanel")).toContainText("Playing");
+  await expect(watcher.locator(".matchPanel")).toContainText("Watching");
   await expect(guest.locator(".matchPanel")).toContainText("Playing");
 
   await owner.close();
+  await watcher.close();
   await guest.close();
 });
 

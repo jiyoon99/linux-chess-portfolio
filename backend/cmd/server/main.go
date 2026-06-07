@@ -32,30 +32,33 @@ import (
 )
 
 type client struct {
-	id       string
-	conn     *websocket.Conn
-	mu       sync.Mutex
-	gameID   string
-	color    chess.Color
-	userID   string
-	username string
+	id         string
+	conn       *websocket.Conn
+	mu         sync.Mutex
+	gameID     string
+	color      chess.Color
+	spectating bool
+	watchCode  string
+	userID     string
+	username   string
 }
 
 type game struct {
-	id        string
-	board     *chess.Game
-	white     *client
-	black     *client
-	aiColor   chess.Color
-	aiLevel   string
-	aiEngine  string
-	roomCode  string
-	persisted bool
-	counted   bool
-	moves     []string
-	rematch   map[string]bool
-	createdAt time.Time
-	mu        sync.Mutex
+	id         string
+	board      *chess.Game
+	white      *client
+	black      *client
+	spectators map[string]*client
+	aiColor    chess.Color
+	aiLevel    string
+	aiEngine   string
+	roomCode   string
+	persisted  bool
+	counted    bool
+	moves      []string
+	rematch    map[string]bool
+	createdAt  time.Time
+	mu         sync.Mutex
 }
 
 type inboundMessage struct {
@@ -167,12 +170,13 @@ var (
 
 	// 실시간 게임 판단은 지연을 줄이기 위해 메모리 상태를 기준으로 처리한다.
 	// Redis에는 운영 패널과 재시작 대응에 필요한 일부 상태만 복제한다.
-	stateMu sync.Mutex
-	waiting []*client
-	rooms   = map[string]*client{}
-	games   = map[string]*game{}
-	dbPool  *pgxpool.Pool
-	cache   *redis.Client
+	stateMu        sync.Mutex
+	waiting        []*client
+	rooms          = map[string]*client{}
+	roomSpectators = map[string]map[string]*client{}
+	games          = map[string]*game{}
+	dbPool         *pgxpool.Pool
+	cache          *redis.Client
 
 	statsMu           sync.Mutex
 	activeConnections int
@@ -206,18 +210,27 @@ func main() {
 	initCache()
 	defer closeCache()
 
+	port := serverPort()
 	handler := httpHandler()
 	server := &http.Server{
-		Addr:              ":3000",
+		Addr:              ":" + port,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	logJSON("info", "server_start", map[string]interface{}{"addr": ":3000"})
+	logJSON("info", "server_start", map[string]interface{}{"addr": ":" + port})
 	if err := server.ListenAndServe(); err != nil {
 		logJSON("error", "server_stopped", map[string]interface{}{"error": err.Error()})
 		os.Exit(1)
 	}
+}
+
+func serverPort() string {
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		return "3000"
+	}
+	return port
 }
 
 func httpHandler() http.Handler {
@@ -639,6 +652,8 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			handleCreateRoom(c)
 		case "room:join":
 			handleJoinRoom(c, msg.Payload)
+		case "spectate:join":
+			handleSpectateJoin(c, msg.Payload)
 		case "bot:join":
 			handleBotJoin(c, msg.Payload)
 		case "game:move":
@@ -687,13 +702,14 @@ func startGameLocked(white *client, black *client) {
 func startGameWithRoomLocked(white *client, black *client, roomCode string) {
 	// 호출자는 이미 stateMu를 잡고 있다. 큐/방 제거와 게임 생성을 한 번에 처리해 중복 참가를 막는다.
 	g := &game{
-		id:        randomID(10),
-		board:     chess.NewGame(),
-		white:     white,
-		black:     black,
-		roomCode:  roomCode,
-		moves:     []string{},
-		createdAt: time.Now().UTC(),
+		id:         randomID(10),
+		board:      chess.NewGame(),
+		white:      white,
+		black:      black,
+		spectators: map[string]*client{},
+		roomCode:   roomCode,
+		moves:      []string{},
+		createdAt:  time.Now().UTC(),
 	}
 
 	white.gameID = g.id
@@ -705,18 +721,20 @@ func startGameWithRoomLocked(white *client, black *client, roomCode string) {
 
 	send(white, "game:start", gameView(g, chess.White, nil))
 	send(black, "game:start", gameView(g, chess.Black, nil))
+	attachRoomSpectatorsLocked(roomCode, g)
 }
 
 func startBotGameLocked(c *client, level string) {
 	g := &game{
-		id:        randomID(10),
-		board:     chess.NewGame(),
-		white:     c,
-		aiColor:   chess.Black,
-		aiLevel:   normalizeAILevel(level),
-		aiEngine:  aiEngineName(),
-		moves:     []string{},
-		createdAt: time.Now().UTC(),
+		id:         randomID(10),
+		board:      chess.NewGame(),
+		white:      c,
+		spectators: map[string]*client{},
+		aiColor:    chess.Black,
+		aiLevel:    normalizeAILevel(level),
+		aiEngine:   aiEngineName(),
+		moves:      []string{},
+		createdAt:  time.Now().UTC(),
 	}
 
 	c.gameID = g.id
@@ -737,6 +755,9 @@ func handleCreateRoom(c *client) {
 	removeWaitingLocked(c)
 	code := uniqueRoomCodeLocked()
 	rooms[code] = c
+	if roomSpectators[code] == nil {
+		roomSpectators[code] = map[string]*client{}
+	}
 	// 방 코드는 Redis에 만료 시간을 두고 기록한다. 현재 프로세스의 실제 매칭 기준은 메모리 map이다.
 	cacheSetRoom(code, c.id)
 	send(c, "room:created", map[string]string{"code": code})
@@ -763,6 +784,85 @@ func handleJoinRoom(c *client, raw json.RawMessage) {
 	cacheDeleteRoom(code)
 	removeWaitingLocked(c)
 	startGameWithRoomLocked(host, c, code)
+}
+
+func handleSpectateJoin(c *client, raw json.RawMessage) {
+	var payload roomPayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		send(c, "game:error", map[string]string{"message": "Malformed room code."})
+		return
+	}
+	code := strings.ToUpper(strings.TrimSpace(payload.Code))
+
+	stateMu.Lock()
+	defer stateMu.Unlock()
+
+	if c.gameID != "" {
+		send(c, "game:error", map[string]string{"message": "Already in a game."})
+		return
+	}
+
+	if roomSpectators[code] == nil {
+		roomSpectators[code] = map[string]*client{}
+	}
+	if host := rooms[code]; host != nil {
+		roomSpectators[code][c.id] = c
+		c.spectating = true
+		c.watchCode = code
+		send(c, "room:watching", map[string]string{"code": code})
+		return
+	}
+
+	if g := activeGameForRoomLocked(code); g != nil {
+		attachSpectatorLocked(g, c, code)
+		return
+	}
+
+	send(c, "game:error", map[string]string{"message": "Room not found."})
+}
+
+func attachRoomSpectatorsLocked(roomCode string, g *game) {
+	if roomCode == "" || g == nil {
+		return
+	}
+	spectators := roomSpectators[roomCode]
+	if len(spectators) == 0 {
+		delete(roomSpectators, roomCode)
+		return
+	}
+	for id, spectator := range spectators {
+		attachSpectatorLocked(g, spectator, roomCode)
+		delete(spectators, id)
+	}
+	delete(roomSpectators, roomCode)
+}
+
+func attachSpectatorLocked(g *game, c *client, roomCode string) {
+	if g == nil || c == nil {
+		return
+	}
+	if g.spectators == nil {
+		g.spectators = map[string]*client{}
+	}
+	c.gameID = g.id
+	c.color = chess.NoColor
+	c.spectating = true
+	c.watchCode = roomCode
+	g.spectators[c.id] = c
+	cacheSetGame(g)
+	send(c, "game:start", gameView(g, chess.NoColor, map[string]interface{}{"mode": "spectator", "spectator": true, "roomCode": roomCode}))
+}
+
+func activeGameForRoomLocked(roomCode string) *game {
+	if roomCode == "" {
+		return nil
+	}
+	for _, g := range games {
+		if g != nil && g.roomCode == roomCode && g.board.Outcome() == chess.NoOutcome {
+			return g
+		}
+	}
+	return nil
 }
 
 func handleBotJoin(c *client, raw json.RawMessage) {
@@ -890,12 +990,12 @@ func handleRematch(c *client) {
 
 	if !whiteReady || !blackReady {
 		send(c, "game:rematch_requested", map[string]interface{}{
-			"gameId":      g.id,
+			"gameId":       g.id,
 			"rematchReady": false,
 		})
 		if opponent := rematchOpponent(g, c); opponent != nil {
 			send(opponent, "game:rematch_requested", map[string]interface{}{
-				"gameId":      g.id,
+				"gameId":       g.id,
 				"rematchReady": false,
 			})
 		}
@@ -903,6 +1003,14 @@ func handleRematch(c *client) {
 	}
 
 	stateMu.Lock()
+	if roomCode != "" && len(g.spectators) > 0 {
+		if roomSpectators[roomCode] == nil {
+			roomSpectators[roomCode] = map[string]*client{}
+		}
+		for id, spectator := range g.spectators {
+			roomSpectators[roomCode][id] = spectator
+		}
+	}
 	delete(games, g.id)
 	cacheDeleteGame(g.id)
 	if white != nil && black != nil {
@@ -949,17 +1057,22 @@ func handleClose(c *client) {
 	stateMu.Lock()
 	removeWaitingLocked(c)
 	removeRoomOwnerLocked(c)
+	removeSpectatorLocked(c)
 
 	var opponent *client
 	if c.gameID != "" {
 		if g := games[c.gameID]; g != nil {
 			if g.white == c {
 				opponent = g.black
-			} else {
+			} else if g.black == c {
 				opponent = g.white
+			} else {
+				delete(g.spectators, c.id)
 			}
-			delete(games, g.id)
-			cacheDeleteGame(g.id)
+			if g.white == c || g.black == c {
+				delete(games, g.id)
+				cacheDeleteGame(g.id)
+			}
 		}
 	}
 	stateMu.Unlock()
@@ -1926,6 +2039,9 @@ func broadcast(g *game, messageType string, payload interface{}) {
 	if g.black != nil {
 		send(g.black, messageType, payload)
 	}
+	for _, spectator := range g.spectators {
+		send(spectator, messageType, payload)
+	}
 }
 
 func send(c *client, messageType string, payload interface{}) {
@@ -1985,8 +2101,43 @@ func removeRoomOwnerLocked(c *client) {
 	for code, owner := range rooms {
 		if owner == c {
 			delete(rooms, code)
+			notifyRoomClosedLocked(code)
 		}
 	}
+}
+
+func removeSpectatorLocked(c *client) {
+	if c == nil || !c.spectating {
+		return
+	}
+	if c.watchCode != "" {
+		if spectators := roomSpectators[c.watchCode]; spectators != nil {
+			delete(spectators, c.id)
+			if len(spectators) == 0 {
+				delete(roomSpectators, c.watchCode)
+			}
+		}
+	}
+	if c.gameID != "" {
+		if g := games[c.gameID]; g != nil {
+			delete(g.spectators, c.id)
+		}
+	}
+}
+
+func notifyRoomClosedLocked(code string) {
+	spectators := roomSpectators[code]
+	if len(spectators) == 0 {
+		delete(roomSpectators, code)
+		return
+	}
+	for id, spectator := range spectators {
+		send(spectator, "room:closed", map[string]string{"code": code})
+		spectator.spectating = false
+		spectator.watchCode = ""
+		delete(spectators, id)
+	}
+	delete(roomSpectators, code)
 }
 
 func uniqueRoomCodeLocked() string {
